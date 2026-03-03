@@ -1,3 +1,7 @@
+---
+name: "dialogue_rules"
+description: "Rules for writing compelling and character-specific dialogue with subtext."
+---
 # Dialogue Writing Rules
 
 ## Core Principles

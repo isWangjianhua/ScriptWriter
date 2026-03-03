@@ -1,3 +1,7 @@
+---
+name: "hollywood_format"
+description: "Standard Hollywood screenplay formatting rules."
+---
 # Hollywood Script Formatting
 
 1. **Scene Headings (Sluglines)**: Must start with INT. or EXT., followed by LOCATION, followed by TIME (DAY, NIGHT, CONTINUOUS). All caps.

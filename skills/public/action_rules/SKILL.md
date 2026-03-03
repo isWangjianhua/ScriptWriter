@@ -1,3 +1,7 @@
+---
+name: "action_rules"
+description: "Protocol for writing visceral, spatially-aware action and combat sequences."
+---
 # Action and Combat Protocol
 
 ## Visceral Description

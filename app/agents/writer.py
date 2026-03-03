@@ -1,17 +1,35 @@
 import os
+import re
 from langchain_core.messages import AIMessage, SystemMessage
 from app.core.state import ScreenplayState
 
 def load_skill_context(skill_name: str) -> str:
-    """Reads the Markdown skill file from disk to inject as context."""
-    # Navigate from app/agents/writer.py -> app/agents -> app -> project_root -> skills
+    """Reads the Markdown skill file from the DeerFlow-style directory structure and strips the yaml frontmatter."""
     project_root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
-    file_path = os.path.join(project_root, "skills", f"{skill_name}.md")
-    try:
-        with open(file_path, "r", encoding="utf-8") as f:
-            return f.read()
-    except FileNotFoundError:
-        return ""
+    
+    # We check in both public and custom categories like DeerFlow does
+    for category in ["public", "custom"]:
+        file_path = os.path.join(project_root, "skills", category, skill_name, "SKILL.md")
+        if not os.path.exists(file_path):
+            continue
+            
+        try:
+            with open(file_path, "r", encoding="utf-8") as f:
+                content = f.read()
+                
+            # Parse YAML front matter using regex like DeerFlow parser.py
+            front_matter_match = re.match(r"^---\s*\n(.*?)\n---\s*\n", content, re.DOTALL)
+            if front_matter_match:
+                # Strip the frontmatter to only return the actual skill markdown payload to the LLM
+                return content[front_matter_match.end():].strip()
+            
+            # If no frontmatter is found, just return the whole file
+            return content.strip()
+            
+        except Exception as e:
+            print(f"Error reading skill {skill_name}: {e}")
+            
+    return ""
 
 def writer_node(state: ScreenplayState):
     """Generates the screenplay content based on the plan and context."""
