@@ -1,5 +1,5 @@
 import asyncio
-from app.workflow.graph import compiled_graph
+from scriptwriter.workflow.graph import compiled_graph
 from langchain_core.messages import HumanMessage
 
 async def main():
