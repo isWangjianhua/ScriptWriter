@@ -6,6 +6,7 @@ def test_screenplay_state_dict():
         "user_id": "test_user",
         "project_id": "test_project",
         "current_draft": "",
+        "plan": [],
         "critic_notes": [],
         "revision_count": 0,
         "artifacts": {}

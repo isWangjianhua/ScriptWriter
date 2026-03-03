@@ -9,6 +9,7 @@ class ScreenplayState(TypedDict):
     
     # Text state
     current_draft: str
+    plan: List[Dict[str, Any]] # e.g. [{"id": 1, "desc": "intro", "status": "pending"}]
     
     # Critic state
     critic_notes: List[str]

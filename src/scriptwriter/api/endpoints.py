@@ -31,6 +31,7 @@ async def chat_stream(request: Request):
             "project_id": project_id, 
             "revision_count": 0, 
             "critic_notes": [], 
+            "plan": [],
             "current_draft": ""
         }
         
