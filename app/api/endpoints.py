@@ -10,21 +10,24 @@ router = APIRouter()
 async def chat_stream(request: Request):
     data = await request.json()
     user_input = data.get("message")
-    tenant_id = data.get("tenant_id", "default_tenant")
+    user_id = data.get("user_id", "default_user")
     project_id = data.get("project_id", "default_project")
+    # In a proper production system, thread_id should be a strict standalone UUID
+    # stored in a DB and passed from the frontend, rather than concatenating business logic.
+    thread_id = data.get("thread_id", project_id)
     
     async def event_generator():
         config = {
             "configurable": {
                 # thread_id isolates conversational checkpoints for LangGraph memory
-                "thread_id": f"{tenant_id}_{project_id}",
-                # pass tenant_id into config to implicitly forward to backend Tools
-                "tenant_id": tenant_id
+                "thread_id": thread_id,
+                # pass user_id into config to implicitly forward to backend Tools
+                "user_id": user_id
             }
         }
         inputs = {
             "messages": [HumanMessage(content=user_input)], 
-            "tenant_id": tenant_id,
+            "user_id": user_id,
             "project_id": project_id, 
             "revision_count": 0, 
             "critic_notes": [], 
