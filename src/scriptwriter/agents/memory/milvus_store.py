@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import os
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -9,6 +10,13 @@ GLOBAL_COLLECTION_NAME = "global_script_vectors"
 _milvus_client: Any | None = None
 _data_type: Any | None = None
 _init_error: Exception | None = None
+
+
+def reset_milvus_for_tests() -> None:
+    global _milvus_client, _data_type, _init_error
+    _milvus_client = None
+    _data_type = None
+    _init_error = None
 
 
 def _get_milvus_client() -> Any | None:
@@ -22,7 +30,8 @@ def _get_milvus_client() -> Any | None:
     try:
         from pymilvus import DataType, MilvusClient
 
-        _milvus_client = MilvusClient("./data/milvus_demo.db")
+        db_path = os.getenv("SCRIPTWRITER_MILVUS_DB_PATH", "./data/milvus_demo.db")
+        _milvus_client = MilvusClient(db_path)
         _data_type = DataType
         return _milvus_client
     except Exception as exc:
@@ -33,6 +42,25 @@ def _get_milvus_client() -> Any | None:
 
 def _escape_filter_value(raw: str) -> str:
     return raw.replace("\\", "\\\\").replace('"', '\\"')
+
+
+def _collection_field_names() -> set[str]:
+    client = _get_milvus_client()
+    if client is None:
+        return set()
+
+    try:
+        info = client.describe_collection(GLOBAL_COLLECTION_NAME)
+    except Exception:
+        return set()
+
+    fields = info.get("fields", []) if isinstance(info, dict) else []
+    names = {
+        str(field.get("name"))
+        for field in fields
+        if isinstance(field, dict) and isinstance(field.get("name"), str)
+    }
+    return names
 
 
 def _ensure_collection_exists(dimension: int) -> bool:
@@ -48,11 +76,20 @@ def _ensure_collection_exists(dimension: int) -> bool:
         schema.add_field(field_name="project_id", datatype=_data_type.VARCHAR, max_length=255)
         schema.add_field(field_name="text", datatype=_data_type.VARCHAR, max_length=65535)
         schema.add_field(field_name="source", datatype=_data_type.VARCHAR, max_length=255)
+        schema.add_field(field_name="doc_id", datatype=_data_type.VARCHAR, max_length=255)
+        schema.add_field(field_name="doc_type", datatype=_data_type.VARCHAR, max_length=64)
+        schema.add_field(field_name="path_l1", datatype=_data_type.VARCHAR, max_length=255)
+        schema.add_field(field_name="path_l2", datatype=_data_type.VARCHAR, max_length=255)
+        schema.add_field(field_name="segment_type", datatype=_data_type.VARCHAR, max_length=64)
+        schema.add_field(field_name="chunk_order", datatype=_data_type.INT64)
 
         index_params = client.prepare_index_params()
         index_params.add_index(field_name="vector", metric_type="COSINE", index_type="FLAT")
         index_params.add_index(field_name="user_id", index_type="Trie")
         index_params.add_index(field_name="project_id", index_type="Trie")
+        index_params.add_index(field_name="doc_id", index_type="Trie")
+        index_params.add_index(field_name="path_l1", index_type="Trie")
+        index_params.add_index(field_name="path_l2", index_type="Trie")
 
         client.create_collection(
             collection_name=GLOBAL_COLLECTION_NAME,
@@ -67,8 +104,12 @@ def add_texts_to_milvus(
     project_id: str,
     texts: list[str],
     vectors: list[list[float]],
+    metadatas: list[dict[str, object]] | None = None,
 ) -> bool:
     if not texts or not vectors or len(texts) != len(vectors):
+        return False
+
+    if metadatas is not None and len(metadatas) != len(texts):
         return False
 
     if not _ensure_collection_exists(dimension=len(vectors[0])):
@@ -78,36 +119,87 @@ def add_texts_to_milvus(
     if client is None:
         return False
 
-    data = [
-        {
-            "vector": vectors[i],
-            "text": texts[i],
+    data: list[dict[str, object]] = []
+    for idx in range(len(texts)):
+        item: dict[str, object] = {
+            "vector": vectors[idx],
+            "text": texts[idx],
             "user_id": user_id,
             "project_id": project_id,
             "source": "user_upload",
         }
-        for i in range(len(texts))
-    ]
-    client.insert(collection_name=GLOBAL_COLLECTION_NAME, data=data)
+        if metadatas is not None:
+            item.update(metadatas[idx])
+        data.append(item)
+
+    try:
+        client.insert(collection_name=GLOBAL_COLLECTION_NAME, data=data)
+    except Exception as exc:
+        logger.warning("Failed to insert vectors into Milvus: %s", exc)
+        return False
+
     return True
 
 
-def search_milvus_bible(user_id: str, project_id: str, query_vector: list[float], limit: int = 2) -> list[str]:
+def _build_filter_expr(
+    user_id: str,
+    project_id: str,
+    filters: dict[str, object],
+    field_names: set[str],
+) -> str:
+    safe_user_id = _escape_filter_value(user_id)
+    safe_project_id = _escape_filter_value(project_id)
+    conditions = [f'user_id == "{safe_user_id}"', f'project_id == "{safe_project_id}"']
+
+    def add_equals(field: str, raw_value: object) -> None:
+        if field not in field_names:
+            return
+        if isinstance(raw_value, str) and raw_value.strip():
+            conditions.append(f'{field} == "{_escape_filter_value(raw_value.strip())}"')
+
+    add_equals("doc_type", filters.get("doc_type"))
+    add_equals("path_l1", filters.get("path_l1"))
+    add_equals("path_l2", filters.get("path_l2"))
+    add_equals("segment_type", filters.get("segment_type"))
+
+    doc_ids = filters.get("doc_ids")
+    if "doc_id" in field_names and isinstance(doc_ids, list):
+        safe_ids = [
+            f'"{_escape_filter_value(doc_id)}"'
+            for doc_id in doc_ids
+            if isinstance(doc_id, str) and doc_id.strip()
+        ]
+        if safe_ids:
+            conditions.append(f"doc_id in [{', '.join(safe_ids)}]")
+
+    return " and ".join(conditions)
+
+
+def search_milvus_bible(
+    user_id: str,
+    project_id: str,
+    query_vector: list[float],
+    limit: int = 2,
+    filters: dict[str, object] | None = None,
+) -> list[str]:
     client = _get_milvus_client()
     if client is None or not client.has_collection(GLOBAL_COLLECTION_NAME):
         return []
 
-    safe_user_id = _escape_filter_value(user_id)
-    safe_project_id = _escape_filter_value(project_id)
-    filter_expr = f'user_id == "{safe_user_id}" and project_id == "{safe_project_id}"'
+    field_names = _collection_field_names()
+    filter_expr = _build_filter_expr(user_id, project_id, filters or {}, field_names)
 
-    search_res = client.search(
-        collection_name=GLOBAL_COLLECTION_NAME,
-        data=[query_vector],
-        limit=limit,
-        filter=filter_expr,
-        output_fields=["text", "source"],
-    )
+    try:
+        search_res = client.search(
+            collection_name=GLOBAL_COLLECTION_NAME,
+            data=[query_vector],
+            limit=limit,
+            filter=filter_expr,
+            output_fields=["text", "source", "doc_id", "doc_type", "path_l1", "path_l2"],
+        )
+    except Exception as exc:
+        logger.warning("Milvus search failed: %s", exc)
+        return []
 
     results: list[str] = []
     for hits in search_res:

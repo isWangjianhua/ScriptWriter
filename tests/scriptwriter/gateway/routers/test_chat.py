@@ -2,6 +2,7 @@ import httpx
 import pytest
 
 from scriptwriter.gateway.app import app
+from scriptwriter.rag import reset_knowledge_services_for_tests
 
 
 @pytest.fixture
@@ -44,3 +45,29 @@ async def test_chat_endpoint_rejects_empty_message():
             json={"message": "", "user_id": "user_1", "project_id": "test_1"},
         )
     assert response.status_code == 422
+
+
+@pytest.mark.anyio
+async def test_knowledge_ingest_endpoint(tmp_path, monkeypatch):
+    monkeypatch.setenv("SCRIPTWRITER_RAG_DATA_DIR", str(tmp_path))
+    reset_knowledge_services_for_tests(data_dir=tmp_path)
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.post(
+            "/api/knowledge/ingest",
+            json={
+                "user_id": "user_1",
+                "project_id": "project_1",
+                "doc_type": "script",
+                "title": "Pilot",
+                "path_l1": "season1",
+                "path_l2": "ep1",
+                "content": "INT. ROOM - DAY\nHe sits.\n\nEXT. ROAD - NIGHT\nShe runs.",
+            },
+        )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["doc_id"]
+    assert payload["chunk_count"] >= 2
