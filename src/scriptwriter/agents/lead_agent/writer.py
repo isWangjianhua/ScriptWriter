@@ -1,98 +1,182 @@
+from __future__ import annotations
+
 import asyncio
 import logging
 import os
 import re
 from functools import lru_cache
-from langchain_core.messages import SystemMessage
-from scriptwriter.agents.thread_state import ScreenplayState
+from typing import Any
+
+from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
 from langchain_openai import ChatOpenAI
-from scriptwriter.tools.builtins.search_bible import search_story_bible
+
+from scriptwriter.agents.thread_state import ScreenplayState
 from scriptwriter.mcp.tools import get_mcp_tools
+from scriptwriter.tools.builtins.search_bible import search_story_bible
+from scriptwriter.tools.builtins.web_search import search_web, search_web_hits
 
 logger = logging.getLogger(__name__)
 
+_MAX_TOOL_ROUNDS = 3
 
-@lru_cache(maxsize=32)
-def load_skill_context(skill_name: str) -> str:
-    """Reads the Markdown skill file from the DeerFlow-style directory structure and strips the yaml frontmatter."""
-    # Navigate: src/scriptwriter/agents/writer.py -> src/scriptwriter/agents -> src/scriptwriter -> src -> project_root
-    project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
-    
-    # We check in both public and custom categories like DeerFlow does
-    for category in ["public", "custom"]:
-        file_path = os.path.join(project_root, "skills", category, skill_name, "SKILL.md")
-        if not os.path.exists(file_path):
-            continue
-            
+
+
+_HOT_TOPIC_PATTERNS = (
+    "最新",
+    "热点",
+    "热搜",
+    "今日",
+    "今天",
+    "实时",
+    "最近",
+    "breaking",
+    "latest",
+    "today",
+    "news",
+    "trend",
+)
+
+
+def _needs_web_search(user_input: str) -> bool:
+    lowered = user_input.lower()
+    return any(token in lowered for token in _HOT_TOPIC_PATTERNS)
+
+
+def _render_web_context(raw_user_input: str) -> str:
+    hits = search_web_hits(raw_user_input, max_results=5)
+    if not hits:
+        return ""
+    return "\n".join(f"- {hit.title}: {hit.snippet} ({hit.url})" for hit in hits)
+
+
+def _extract_text_content(raw_content: Any) -> str:
+    if isinstance(raw_content, str):
+        return raw_content
+
+    if isinstance(raw_content, list):
+        blocks: list[str] = []
+        for item in raw_content:
+            if isinstance(item, dict):
+                text = item.get("text")
+                if isinstance(text, str):
+                    blocks.append(text)
+            elif isinstance(item, str):
+                blocks.append(item)
+        return "\n".join(blocks).strip()
+
+    return str(raw_content)
+
+
+def _invoke_tool(
+    *,
+    tool_map: dict[str, Any],
+    tool_name: str,
+    tool_args: Any,
+    user_id: str,
+    project_id: str,
+) -> str:
+    tool = tool_map.get(tool_name)
+    if tool is None:
+        return f"Tool not found: {tool_name}"
+
+    payload = tool_args if isinstance(tool_args, dict) else {}
+    try:
+        result = tool.invoke(payload, config={"configurable": {"user_id": user_id, "project_id": project_id}})
+        return str(result)
+    except TypeError:
         try:
-            with open(file_path, "r", encoding="utf-8") as f:
-                content = f.read()
-                
-            # Parse YAML front matter using regex like DeerFlow parser.py
-            front_matter_match = re.match(r"^---\s*\n(.*?)\n---\s*\n", content, re.DOTALL)
-            if front_matter_match:
-                # Strip the frontmatter to only return the actual skill markdown payload to the LLM
-                return content[front_matter_match.end():].strip()
-            
-            # If no frontmatter is found, just return the whole file
-            return content.strip()
-            
-        except Exception as e:
-            logger.warning("Error reading skill '%s': %s", skill_name, e)
-            
-    return ""
+            result = tool.invoke(payload)
+            return str(result)
+        except Exception as exc:
+            return f"Tool '{tool_name}' failed: {str(exc)}"
+    except Exception as exc:
+        return f"Tool '{tool_name}' failed: {str(exc)}"
 
-def writer_node(state: ScreenplayState):
-    """Generates the screenplay content based on the plan and context, now with MCP powers."""
+
+from langchain.agents import create_agent
+from scriptwriter.agents.lead_agent.middleware import ScriptWriterMiddleware
+
+def writer_node(state: ScreenplayState, llm: Any = None):
+    """Generate screenplay content using the Agent factory."""
     messages = state.get("messages", [])
     user_input = messages[-1].content.lower() if messages else ""
-    
-    # Progressive Skill Loading
-    active_skills = ["hollywood_format"]
-    if "fight" in user_input or "action" in user_input or "shoot" in user_input:
-        active_skills.append("action_rules")
-    if "talk" in user_input or "dialogue" in user_input or "say" in user_input:
-        active_skills.append("dialogue_rules")
-        
-    skill_texts = [f"--- SKILL: {s} ---\n" + load_skill_context(s) for s in active_skills]
-    compiled_skills = "\n\n".join(skill_texts)
-    
-    sys_msg = SystemMessage(content=(
-        "You are an expert screenwriter executing the plan from the Showrunner.\n\n"
-        f"Base your writing ONLY on the following skills rules:\n{compiled_skills}"
-    ))
-    
-    # Assemble tools: Local Data Base Tool + External MCP Tools
-    # For MVP, we dynamically fetch tools utilizing the unified MultiServerMCPClient mapping
-    # just like DeerFlow's tools.py implementation.
+
+    # 1. Add research context if needed
+    web_context = ""
+    if _needs_web_search(user_input):
+        raw_user_input = messages[-1].content if messages else ""
+        web_context = _render_web_context(raw_user_input)
+
+    # 2. Finalize system prompt
+    from scriptwriter.agents.lead_agent.prompts import get_writer_prompt
+    base_prompt = get_writer_prompt(web_context=web_context)
+
+    # 4. Resolve Tools
     try:
         asyncio.get_running_loop()
-        logger.info("Skipping MCP discovery inside active event loop")
-        mcp_tools = []
+        mcp_tools: list[Any] = []
     except RuntimeError:
         mcp_tools = asyncio.run(get_mcp_tools())
-    
-    all_tools = [search_story_bible] + mcp_tools
-    
-    # In a full flow, you would invoke the LLM with the bound tools. 
-    # For safe MVP visualization and test-passing, we mock the output state unless OPENAI_API_KEY is present
-    current_draft = state.get("current_draft", "")
-    new_draft = current_draft + " INT. ABANDONED FACTORY - DAY\nJohn looks around. "
-    
-    if os.environ.get("OPENAI_API_KEY"):
-        ChatOpenAI(model="gpt-4o", temperature=0.7).bind_tools(all_tools)
-        # In a real workflow, we would return the specific graph state update including the `llm_output` 
-        # But this suffices for an MVP skeleton that proves the Tools + LLM + Skills wiring!
-    
-    return {
-        "current_draft": new_draft,
-        "plan": state.get("plan", []),
-        "critic_notes": state.get("critic_notes", []),
-        "revision_count": state.get("revision_count", 0),
-        "artifacts": {
-            "scene_1": new_draft,
-            "loaded_skills_debug": active_skills,
-            "mcp_tools_mounted_count": len(mcp_tools),
-            "skill_content_debug": compiled_skills
+
+    from scriptwriter.tools.builtins.store_bible import save_story_bible
+    from scriptwriter.tools.builtins.read_skill import read_skill
+    all_tools = [search_story_bible, save_story_bible, search_web, read_skill] + mcp_tools
+    # 5. Build and execute Agent
+    if not os.environ.get("OPENAI_API_KEY") and llm is None:
+        logger.info("No OPENAI_API_KEY found, using mock writer.")
+        new_draft = state.get("current_draft", "") + "\nINT. OFFICE - DAY\nJohn writes a script."
+        return {
+            "current_draft": new_draft,
+            "artifacts": {
+                **state.get("artifacts", {}),
+                "scene_1": new_draft,
+                "writer_mock": True
+            },
         }
+
+    if llm is None:
+        model_name = os.getenv("SCRIPTWRITER_WRITER_MODEL", "gpt-4o")
+        llm = ChatOpenAI(model=model_name, temperature=0.7)
+
+    agent = create_agent(
+        model=llm,
+        tools=all_tools,
+        middleware=[ScriptWriterMiddleware(inject_plan=True, inject_draft=True)],
+        system_prompt=base_prompt,
+        state_schema=ScreenplayState,
+    )
+
+    # The agent run inherits the state and returns the delta
+    config = {"configurable": {
+        "user_id": state.get("user_id", "default_user"),
+        "project_id": state.get("project_id", "default_project")
+    }}
+    
+    # We invoke the agent. It returns a dict with 'messages' and 'artifacts' etc.
+    result = agent.invoke(state, config=config)
+    
+    # Extract the new draft from the last AIMessage content
+    final_messages = result.get("messages", [])
+    new_draft = state.get("current_draft", "")
+    if final_messages and hasattr(final_messages[-1], "content"):
+        content = final_messages[-1].content
+        if isinstance(content, str) and content.strip():
+            new_draft = content.strip()
+
+    # Merge artifacts
+    merged_artifacts = {
+        **state.get("artifacts", {}),
+        **result.get("artifacts", {}),
+        "scene_1": new_draft,
+        "mcp_tools_mounted_count": len(mcp_tools),
+        "web_search_used": bool(web_context),
+        "web_context_debug": web_context,
     }
+
+    return {
+        **result,
+        "current_draft": new_draft,
+        "artifacts": merged_artifacts,
+    }
+
+

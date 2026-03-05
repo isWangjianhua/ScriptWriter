@@ -175,13 +175,13 @@ def _build_filter_expr(
     return " and ".join(conditions)
 
 
-def search_milvus_bible(
+def search_milvus_bible_records(
     user_id: str,
     project_id: str,
     query_vector: list[float],
     limit: int = 2,
     filters: dict[str, object] | None = None,
-) -> list[str]:
+) -> list[dict[str, object]]:
     client = _get_milvus_client()
     if client is None or not client.has_collection(GLOBAL_COLLECTION_NAME):
         return []
@@ -195,17 +195,97 @@ def search_milvus_bible(
             data=[query_vector],
             limit=limit,
             filter=filter_expr,
-            output_fields=["text", "source", "doc_id", "doc_type", "path_l1", "path_l2"],
+            output_fields=[
+                "text",
+                "source",
+                "doc_id",
+                "doc_type",
+                "path_l1",
+                "path_l2",
+                "segment_type",
+                "chunk_order",
+                "title",
+            ],
         )
     except Exception as exc:
         logger.warning("Milvus search failed: %s", exc)
         return []
 
-    results: list[str] = []
+    records: list[dict[str, object]] = []
     for hits in search_res:
         for hit in hits:
-            entity = hit.get("entity", {})
+            entity = hit.get("entity", {}) if isinstance(hit, dict) else {}
+            if not isinstance(entity, dict):
+                continue
             text = entity.get("text")
-            if isinstance(text, str):
-                results.append(text)
-    return results
+            if not isinstance(text, str):
+                continue
+
+            score_value: float | None = None
+            raw_distance = hit.get("distance") if isinstance(hit, dict) else None
+            if isinstance(raw_distance, (float, int)):
+                score_value = float(raw_distance)
+
+            records.append(
+                {
+                    "text": text,
+                    "doc_id": entity.get("doc_id"),
+                    "doc_type": entity.get("doc_type"),
+                    "path_l1": entity.get("path_l1"),
+                    "path_l2": entity.get("path_l2"),
+                    "segment_type": entity.get("segment_type"),
+                    "chunk_order": entity.get("chunk_order"),
+                    "title": entity.get("title"),
+                    "score": score_value,
+                    "source_backend": "milvus",
+                }
+            )
+    return records
+
+
+def search_milvus_bible(
+    user_id: str,
+    project_id: str,
+    query_vector: list[float],
+    limit: int = 2,
+    filters: dict[str, object] | None = None,
+) -> list[str]:
+    records = search_milvus_bible_records(
+        user_id=user_id,
+        project_id=project_id,
+        query_vector=query_vector,
+        limit=limit,
+        filters=filters,
+    )
+    return [str(record["text"]) for record in records if isinstance(record.get("text"), str)]
+
+
+def delete_milvus_documents(*, user_id: str, project_id: str, doc_ids: list[str]) -> int:
+    if not doc_ids:
+        return 0
+
+    client = _get_milvus_client()
+    if client is None or not client.has_collection(GLOBAL_COLLECTION_NAME):
+        return 0
+
+    field_names = _collection_field_names()
+    filter_expr = _build_filter_expr(
+        user_id=user_id,
+        project_id=project_id,
+        filters={"doc_ids": doc_ids},
+        field_names=field_names,
+    )
+
+    try:
+        result = client.delete(collection_name=GLOBAL_COLLECTION_NAME, filter=filter_expr)
+    except Exception as exc:
+        logger.warning("Milvus delete failed: %s", exc)
+        return 0
+
+    if isinstance(result, int):
+        return result
+    if isinstance(result, dict):
+        deleted = result.get("delete_count") or result.get("deleted_count") or result.get("count")
+        if isinstance(deleted, int):
+            return deleted
+    return len(doc_ids)

@@ -17,6 +17,27 @@ class CandidateDocument:
     score: int
 
 
+@dataclass(frozen=True)
+class StoredDocument:
+    doc_id: str
+    user_id: str
+    project_id: str
+    doc_type: str
+    title: str
+    path_l1: str
+    path_l2: str
+    source_path: str
+
+
+@dataclass(frozen=True)
+class ChunkHit:
+    doc_id: str
+    chunk_order: int
+    segment_type: str
+    text: str
+    score: int
+
+
 _TOKEN_RE = re.compile(r"[\w\-]+")
 
 
@@ -184,13 +205,71 @@ class KnowledgeMetadataStore:
         candidates.sort(key=lambda item: item.score, reverse=True)
         return candidates[: max(limit, 0)]
 
-    def search_chunks(self, *, doc_ids: list[str], query: str, limit: int = 5) -> list[str]:
+    def list_documents(
+        self,
+        *,
+        user_id: str,
+        project_id: str,
+        doc_id: str | None = None,
+        doc_type: str | None = None,
+        path_l1: str | None = None,
+        path_l2: str | None = None,
+        limit: int = 1000,
+    ) -> list[StoredDocument]:
+        conditions = ["user_id = ?", "project_id = ?"]
+        params: list[object] = [user_id, project_id]
+
+        if doc_id:
+            conditions.append("doc_id = ?")
+            params.append(doc_id)
+        if doc_type:
+            conditions.append("doc_type = ?")
+            params.append(doc_type)
+        if path_l1:
+            conditions.append("path_l1 = ?")
+            params.append(path_l1)
+        if path_l2:
+            conditions.append("path_l2 = ?")
+            params.append(path_l2)
+
+        sql = (
+            "SELECT doc_id, user_id, project_id, doc_type, title, path_l1, path_l2, source_path "
+            "FROM rag_documents WHERE "
+            + " AND ".join(conditions)
+            + " ORDER BY created_at ASC LIMIT ?"
+        )
+        params.append(max(limit, 0))
+
+        with self._connect() as conn:
+            rows = conn.execute(sql, params).fetchall()
+
+        return [
+            StoredDocument(
+                doc_id=str(row["doc_id"]),
+                user_id=str(row["user_id"]),
+                project_id=str(row["project_id"]),
+                doc_type=str(row["doc_type"]),
+                title=str(row["title"]),
+                path_l1=str(row["path_l1"]),
+                path_l2=str(row["path_l2"]),
+                source_path=str(row["source_path"]),
+            )
+            for row in rows
+        ]
+
+    def search_chunk_rows(
+        self,
+        *,
+        doc_ids: list[str],
+        query: str,
+        limit: int = 5,
+    ) -> list[ChunkHit]:
         if not doc_ids:
             return []
 
         placeholders = ",".join(["?"] * len(doc_ids))
         sql = (
-            "SELECT doc_id, text, chunk_order FROM rag_chunks "
+            "SELECT doc_id, segment_type, text, chunk_order FROM rag_chunks "
             f"WHERE doc_id IN ({placeholders}) ORDER BY chunk_order ASC"
         )
 
@@ -198,7 +277,7 @@ class KnowledgeMetadataStore:
             rows = conn.execute(sql, doc_ids).fetchall()
 
         tokens = _tokenize(query)
-        ranked: list[tuple[int, int, str]] = []
+        ranked: list[ChunkHit] = []
         for row in rows:
             text = str(row["text"])
             lowered = text.lower()
@@ -206,10 +285,22 @@ class KnowledgeMetadataStore:
             if not tokens:
                 score = 1
             if score > 0:
-                ranked.append((score, int(row["chunk_order"]), text))
+                ranked.append(
+                    ChunkHit(
+                        doc_id=str(row["doc_id"]),
+                        chunk_order=int(row["chunk_order"]),
+                        segment_type=str(row["segment_type"]),
+                        text=text,
+                        score=score,
+                    )
+                )
 
-        ranked.sort(key=lambda item: (-item[0], item[1]))
-        return [item[2] for item in ranked[: max(limit, 0)]]
+        ranked.sort(key=lambda item: (-item.score, item.chunk_order))
+        return ranked[: max(limit, 0)]
+
+    def search_chunks(self, *, doc_ids: list[str], query: str, limit: int = 5) -> list[str]:
+        rows = self.search_chunk_rows(doc_ids=doc_ids, query=query, limit=limit)
+        return [row.text for row in rows]
 
     def load_source_text(self, doc_id: str) -> str | None:
         with self._connect() as conn:
