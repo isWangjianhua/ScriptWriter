@@ -20,8 +20,8 @@ The current lead-agent flow is:
 
 - Multi-agent orchestration (`planner -> writer -> critic`)
 - Recoverable state flow (`session/run/events/snapshot`)
-- NDJSON streaming chat API (`/api/chat`)
-- Run recovery API (`/api/runs/{run_id}`)
+- Thread-scoped NDJSON streaming chat API (`/api/threads/{thread_id}/chat`)
+- Thread-scoped run recovery API (`/api/threads/{thread_id}/runs/{run_id}`)
 - State store fallback strategy:
   - PostgreSQL when `SCRIPTWRITER_DATABASE_URL` is configured
   - In-memory store otherwise
@@ -64,7 +64,9 @@ uv run pytest -q
 - `SCRIPTWRITER_ENABLE_BRAVE_MCP`: set to `1` to enable legacy Brave MCP config.
 - `BRAVE_API_KEY`: used when Brave MCP is enabled.
 - `SCRIPTWRITER_RAG_DATA_DIR`: local RAG metadata/source directory (default `data/rag`).
+- `SCRIPTWRITER_THREADS_DIR`: thread file storage root (default `data/threads`).
 - `SCRIPTWRITER_MILVUS_DB_PATH`: Milvus local db path (default `./data/milvus_demo.db`).
+- `SCRIPTWRITER_MAX_UPLOAD_BYTES`: max upload size in bytes (default `20971520`).
 - `SCRIPTWRITER_EMBEDDING_PROVIDER`: `auto`/`openai`/`mock`.
 - `SCRIPTWRITER_EMBEDDING_MODEL`: OpenAI embedding model when provider is openai.
 - `BRAVE_API_KEY`: when set, internet search uses Brave Search API first.
@@ -84,7 +86,7 @@ export SCRIPTWRITER_MCP_SERVERS_JSON='{
 
 ## API
 
-### `POST /api/chat`
+### `POST /api/threads/{thread_id}/chat`
 
 Input JSON:
 
@@ -92,7 +94,8 @@ Input JSON:
 {
   "message": "Write a suspense opening scene",
   "user_id": "user_1",
-  "project_id": "project_alpha"
+  "project_id": "project_alpha",
+  "resume_run_id": "optional_previous_run_id"
 }
 ```
 
@@ -104,7 +107,7 @@ Response is NDJSON (`application/x-ndjson`), including events like:
 - `critic_note`
 - `error`
 
-### `GET /api/runs/{run_id}`
+### `GET /api/threads/{thread_id}/runs/{run_id}?user_id=...&project_id=...`
 
 Returns recovery payload with:
 
@@ -113,7 +116,7 @@ Returns recovery payload with:
 - full event list
 - replay metadata (`replay_from_seq`, `replayed_events`)
 
-### `POST /api/knowledge/ingest`
+### `POST /api/threads/{thread_id}/knowledge/ingest`
 
 Ingest a knowledge document into RAG:
 
@@ -130,6 +133,39 @@ Ingest a knowledge document into RAG:
 ```
 
 Returns `doc_id`, `chunk_count`, `source_path`.
+
+### `POST /api/threads/{thread_id}/knowledge/upload`
+
+Multipart upload + ingestion endpoint. Requires form fields:
+
+- `file`
+- `user_id`
+- `project_id`
+
+Also supports:
+
+- `title`
+- `path_l1`
+- `path_l2`
+- `doc_type`
+
+Returns ingestion metadata plus:
+
+- `virtual_path` (e.g. `/mnt/user-data/uploads/file.txt`)
+- `artifact_url` (e.g. `/api/threads/{thread_id}/artifacts/mnt/user-data/uploads/file.txt`)
+
+### `GET /api/threads/{thread_id}/knowledge/upload/list`
+
+List files uploaded for the thread (`filename`, `size`, `virtual_path`, `artifact_url`, `modified`).
+
+### `DELETE /api/threads/{thread_id}/knowledge/upload/{filename}`
+
+Delete one uploaded file (path traversal blocked).
+
+### `GET /api/threads/{thread_id}/artifacts/{path}`
+
+Read thread artifacts through virtual path mapping (must start with `mnt/user-data/...`).
+Supports inline rendering for text/html and binary download via `?download=true`.
 
 ## Hot Topic Writing
 
@@ -158,6 +194,8 @@ src/scriptwriter/
   gateway/
     app.py            # FastAPI app
     routers/chat.py   # chat + run recovery APIs
+    routers/uploads.py
+    routers/artifacts.py
   state_store/        # store abstraction + in-memory + postgres
   tools/builtins/     # tool layer (e.g. search_story_bible)
   config/             # runtime extension config (MCP)

@@ -10,6 +10,7 @@ from scriptwriter.state_store.base import StateStore, StoredEvent, StoredRun, St
 class InMemoryStateStore(StateStore):
     def __init__(self) -> None:
         self._session_by_scope: dict[tuple[str, str], str] = {}
+        self._scope_by_session: dict[str, tuple[str, str]] = {}
         self._runs: dict[str, StoredRun] = {}
         self._events: dict[str, list[StoredEvent]] = {}
         self._snapshots: dict[str, StoredSnapshot] = {}
@@ -17,14 +18,17 @@ class InMemoryStateStore(StateStore):
     def create_or_get_session(self, user_id: str, project_id: str) -> str:
         key = (user_id, project_id)
         if key not in self._session_by_scope:
-            self._session_by_scope[key] = str(uuid4())
+            session_id = str(uuid4())
+            self._session_by_scope[key] = session_id
+            self._scope_by_session[session_id] = key
         return self._session_by_scope[key]
 
-    def create_run(self, session_id: str, input_message: str) -> str:
+    def create_run(self, session_id: str, thread_id: str, input_message: str) -> str:
         run_id = str(uuid4())
         self._runs[run_id] = StoredRun(
             run_id=run_id,
             session_id=session_id,
+            thread_id=thread_id,
             input_message=input_message,
             status="RUNNING",
         )
@@ -67,6 +71,23 @@ class InMemoryStateStore(StateStore):
     def get_run(self, run_id: str) -> StoredRun | None:
         run = self._runs.get(run_id)
         return deepcopy(run) if run else None
+
+    def get_run_scoped(
+        self,
+        run_id: str,
+        thread_id: str,
+        user_id: str,
+        project_id: str,
+    ) -> StoredRun | None:
+        run = self._runs.get(run_id)
+        if run is None:
+            return None
+        if run.thread_id != thread_id:
+            return None
+        session_scope = self._scope_by_session.get(run.session_id)
+        if session_scope != (user_id, project_id):
+            return None
+        return deepcopy(run)
 
     def mark_run_completed(self, run_id: str, current_step: str | None = None) -> None:
         run = self._runs.get(run_id)

@@ -24,6 +24,7 @@ class StoredSnapshot:
 class StoredRun:
     run_id: str
     session_id: str
+    thread_id: str
     input_message: str
     status: str
     current_step: str | None = None
@@ -34,7 +35,7 @@ class StoredRun:
 class StateStore(Protocol):
     def create_or_get_session(self, user_id: str, project_id: str) -> str: ...
 
-    def create_run(self, session_id: str, input_message: str) -> str: ...
+    def create_run(self, session_id: str, thread_id: str, input_message: str) -> str: ...
 
     def append_event(
         self,
@@ -51,6 +52,14 @@ class StateStore(Protocol):
     def get_events(self, run_id: str, after_seq_no: int = 0) -> list[StoredEvent]: ...
 
     def get_run(self, run_id: str) -> StoredRun | None: ...
+
+    def get_run_scoped(
+        self,
+        run_id: str,
+        thread_id: str,
+        user_id: str,
+        project_id: str,
+    ) -> StoredRun | None: ...
 
     def mark_run_completed(self, run_id: str, current_step: str | None = None) -> None: ...
 

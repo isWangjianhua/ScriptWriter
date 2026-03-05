@@ -24,6 +24,8 @@ _SCRIPT_SCENE_RE = re.compile(r"(?m)^\s*(INT\.|EXT\.)[^\n]*$")
 _NOVEL_CHAPTER_RE = re.compile(
     r"(?m)^\s*((CHAPTER|Chapter)\s+\w+|第[一二三四五六七八九十百千0-9]+章)\s*$"
 )
+# Markdown ATX headings: #, ##, ### (levels 1-3 treated as section boundaries)
+_MD_HEADING_RE = re.compile(r"(?m)^#{1,3}\s+.+$")
 
 
 def _split_by_heading(
@@ -75,6 +77,9 @@ def segment_content(content: str, doc_type: str) -> list[Segment]:
         return segments if segments else _fallback_paragraph_segments(body)
     if normalized_type == "novel":
         segments = _split_by_heading(body, _NOVEL_CHAPTER_RE, "chapter")
+        return segments if segments else _fallback_paragraph_segments(body)
+    if normalized_type == "markdown":
+        segments = _split_by_heading(body, _MD_HEADING_RE, "section")
         return segments if segments else _fallback_paragraph_segments(body)
     return _fallback_paragraph_segments(body)
 

@@ -30,6 +30,7 @@ class PostgresStateStore(StateStore):
         CREATE TABLE IF NOT EXISTS agent_runs (
             id UUID PRIMARY KEY,
             session_id UUID NOT NULL REFERENCES agent_sessions(id),
+            thread_id TEXT NOT NULL,
             input_message TEXT NOT NULL,
             status TEXT NOT NULL,
             current_step TEXT,
@@ -61,6 +62,11 @@ class PostgresStateStore(StateStore):
         with self._connect() as conn:
             with conn.cursor() as cur:
                 cur.execute(ddl)
+                cur.execute("ALTER TABLE agent_runs ADD COLUMN IF NOT EXISTS thread_id TEXT")
+                cur.execute("CREATE INDEX IF NOT EXISTS idx_agent_runs_thread_id ON agent_runs(thread_id)")
+                cur.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_agent_events_run_seq ON agent_events(run_id, seq_no)"
+                )
 
     def create_or_get_session(self, user_id: str, project_id: str) -> str:
         with self._connect() as conn:
@@ -79,13 +85,16 @@ class PostgresStateStore(StateStore):
                 )
                 return session_id
 
-    def create_run(self, session_id: str, input_message: str) -> str:
+    def create_run(self, session_id: str, thread_id: str, input_message: str) -> str:
         run_id = str(uuid4())
         with self._connect() as conn:
             with conn.cursor() as cur:
                 cur.execute(
-                    "INSERT INTO agent_runs (id, session_id, input_message, status) VALUES (%s, %s, %s, 'RUNNING')",
-                    (run_id, session_id, input_message),
+                    """
+                    INSERT INTO agent_runs (id, session_id, thread_id, input_message, status)
+                    VALUES (%s, %s, %s, %s, 'RUNNING')
+                    """,
+                    (run_id, session_id, thread_id, input_message),
                 )
         return run_id
 
@@ -94,7 +103,12 @@ class PostgresStateStore(StateStore):
 
         with self._connect() as conn:
             with conn.cursor() as cur:
-                cur.execute("SELECT COALESCE(MAX(seq_no), 0) FROM agent_events WHERE run_id=%s", (run_id,))
+                # Serialize sequence allocation for this run to avoid MAX+1 races.
+                cur.execute("SELECT pg_advisory_xact_lock(hashtext(%s))", (run_id,))
+                cur.execute(
+                    "SELECT COALESCE(MAX(seq_no), 0) FROM agent_events WHERE run_id=%s",
+                    (run_id,),
+                )
                 next_seq = int(cur.fetchone()[0]) + 1
                 cur.execute(
                     """
@@ -103,7 +117,13 @@ class PostgresStateStore(StateStore):
                     """,
                     (run_id, next_seq, event_type, agent_name, Json(payload)),
                 )
-        return StoredEvent(run_id=run_id, seq_no=next_seq, event_type=event_type, agent_name=agent_name, payload=payload)
+        return StoredEvent(
+            run_id=run_id,
+            seq_no=next_seq,
+            event_type=event_type,
+            agent_name=agent_name,
+            payload=payload,
+        )
 
     def save_snapshot(self, run_id: str, last_seq_no: int, state: dict) -> None:
         from psycopg.types.json import Json
@@ -163,7 +183,7 @@ class PostgresStateStore(StateStore):
             with conn.cursor() as cur:
                 cur.execute(
                     """
-                    SELECT id, session_id, input_message, status, current_step, error_code, error_message
+                    SELECT id, session_id, thread_id, input_message, status, current_step, error_code, error_message
                     FROM agent_runs
                     WHERE id=%s
                     """,
@@ -175,11 +195,44 @@ class PostgresStateStore(StateStore):
                 return StoredRun(
                     run_id=str(row[0]),
                     session_id=str(row[1]),
-                    input_message=str(row[2]),
-                    status=str(row[3]),
-                    current_step=row[4],
-                    error_code=row[5],
-                    error_message=row[6],
+                    thread_id=str(row[2] or ""),
+                    input_message=str(row[3]),
+                    status=str(row[4]),
+                    current_step=row[5],
+                    error_code=row[6],
+                    error_message=row[7],
+                )
+
+    def get_run_scoped(
+        self,
+        run_id: str,
+        thread_id: str,
+        user_id: str,
+        project_id: str,
+    ) -> StoredRun | None:
+        with self._connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT r.id, r.session_id, r.thread_id, r.input_message, r.status, r.current_step, r.error_code, r.error_message
+                    FROM agent_runs r
+                    JOIN agent_sessions s ON s.id = r.session_id
+                    WHERE r.id=%s AND r.thread_id=%s AND s.user_id=%s AND s.project_id=%s
+                    """,
+                    (run_id, thread_id, user_id, project_id),
+                )
+                row = cur.fetchone()
+                if not row:
+                    return None
+                return StoredRun(
+                    run_id=str(row[0]),
+                    session_id=str(row[1]),
+                    thread_id=str(row[2] or ""),
+                    input_message=str(row[3]),
+                    status=str(row[4]),
+                    current_step=row[5],
+                    error_code=row[6],
+                    error_message=row[7],
                 )
 
     def mark_run_completed(self, run_id: str, current_step: str | None = None) -> None:

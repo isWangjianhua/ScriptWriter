@@ -1,29 +1,36 @@
+from __future__ import annotations
+
 import asyncio
-from scriptwriter.agents.lead_agent.graph import compiled_graph
+
 from langchain_core.messages import HumanMessage
 
+from scriptwriter.agents.lead_agent.orchestrator import run_lead_agent_flow
 
-async def main():
-    config = {"configurable": {"thread_id": "test_thread_123", "user_id": "user_mnze"}}
+
+async def main() -> None:
     inputs = {
         "messages": [HumanMessage(content="Write a fight scene")],
         "user_id": "user_mnze",
         "project_id": "project_alpha",
+        "thread_id": "thread_demo",
+        "thread_data": {},
         "revision_count": 0,
         "critic_notes": [],
         "plan": [],
         "current_draft": "",
+        "global_context": "",
+        "episodic_memory": [],
+        "artifacts": {},
     }
 
-    # Use invoke to avoid Python 3.13 + langgraph async runtime issues.
-    out = await asyncio.to_thread(compiled_graph.invoke, inputs, config)
-    if "plan" in out:
+    out = await asyncio.to_thread(run_lead_agent_flow, inputs)
+    if out.state.get("plan"):
         print("--- Planner Architecture Plan ---")
-        print(out["plan"])
-    if "artifacts" in out:
-        print("--- Dynamic Skills Loaded ---")
-        print(out["artifacts"].get("loaded_skills_debug"))
-    print("Graph execution complete without exceptions.")
+        print(out.state["plan"])
+    if out.state.get("artifacts"):
+        print("--- Artifacts ---")
+        print(out.state["artifacts"])
+    print("Orchestrator execution complete without exceptions.")
 
 
 if __name__ == "__main__":

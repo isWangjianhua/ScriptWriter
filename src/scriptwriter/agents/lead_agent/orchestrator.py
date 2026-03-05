@@ -63,7 +63,10 @@ def run_lead_agent_flow(initial_state: ScreenplayState, store: StateStore | None
     messages = state.get("messages", [])
     input_message = messages[-1].content if messages else ""
     session_id = store.create_or_get_session(state["user_id"], state["project_id"])
-    run_id = store.create_run(session_id, input_message)
+    thread_id = str(state.get("thread_id", "")).strip()
+    if not thread_id:
+        raise ValueError("thread_id is required in state")
+    run_id = store.create_run(session_id, thread_id, input_message)
     events: list[StoredEvent] = []
 
     _append_event_and_snapshot(
@@ -73,7 +76,12 @@ def run_lead_agent_flow(initial_state: ScreenplayState, store: StateStore | None
         events=events,
         event_type="run_started",
         agent_name="supervisor",
-        payload={"message": input_message, "user_id": state["user_id"], "project_id": state["project_id"]},
+        payload={
+            "thread_id": thread_id,
+            "message": input_message,
+            "user_id": state["user_id"],
+            "project_id": state["project_id"],
+        },
     )
 
     try:
@@ -151,9 +159,21 @@ def run_lead_agent_flow(initial_state: ScreenplayState, store: StateStore | None
     return FlowResult(session_id=session_id, run_id=run_id, state=state, events=events)
 
 
-def recover_run_state(run_id: str, store: StateStore | None = None) -> RecoveryResult:
+def recover_run_state(
+    run_id: str,
+    *,
+    thread_id: str,
+    user_id: str,
+    project_id: str,
+    store: StateStore | None = None,
+) -> RecoveryResult:
     store = store or get_state_store()
-    run = store.get_run(run_id)
+    run = store.get_run_scoped(
+        run_id=run_id,
+        thread_id=thread_id,
+        user_id=user_id,
+        project_id=project_id,
+    )
     if run is None:
         raise KeyError(run_id)
 

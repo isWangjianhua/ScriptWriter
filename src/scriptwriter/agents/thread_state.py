@@ -1,19 +1,27 @@
-from typing import TypedDict, List, Dict, Any, Annotated
-import operator
-from langchain_core.messages import BaseMessage
+from typing import Any
 
-class ScreenplayState(TypedDict):
-    messages: Annotated[List[BaseMessage], operator.add]
+from langchain.agents import AgentState
+
+
+class ScreenplayState(AgentState):
     user_id: str
     project_id: str
-    
+    thread_id: str
+    thread_data: dict[str, str]
+
+    # Core memory / global context (characters, world-building, etc.)
+    global_context: str
+
     # Text state
     current_draft: str
-    plan: List[Dict[str, Any]] # e.g. [{"id": 1, "desc": "intro", "status": "pending"}]
-    
+    plan: list[dict[str, Any]]  # e.g. [{"id": 1, "desc": "intro", "status": "pending"}]
+
+    # Episodic memory (for long-term historical context)
+    episodic_memory: list[str]
+
     # Critic state
-    critic_notes: List[str]
+    critic_notes: list[str]
     revision_count: int
-    
-    # Payload for Frontend UI
-    artifacts: Dict[str, Any]
+
+    # Payload for frontend UI
+    artifacts: dict[str, Any]

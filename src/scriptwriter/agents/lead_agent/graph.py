@@ -1,27 +1,10 @@
-from langgraph.graph import StateGraph, END
+from __future__ import annotations
+
+from scriptwriter.agents.lead_agent.orchestrator import run_lead_agent_flow
 from scriptwriter.agents.thread_state import ScreenplayState
-from scriptwriter.agents.lead_agent.planner import planner_node
-from scriptwriter.agents.lead_agent.writer import writer_node
-from scriptwriter.agents.lead_agent.critic import critic_node
+from scriptwriter.state_store.base import StateStore
 
-def should_revise(state: ScreenplayState):
-    """Routing logic after critic."""
-    if state.get("revision_count", 0) > 0 and state.get("critic_notes") and state.get("revision_count", 0) < 2:
-        return "writer_node"
-    return END
 
-# Build Graph
-builder = StateGraph(ScreenplayState)
-
-# Add Nodes
-builder.add_node("planner_node", planner_node)
-builder.add_node("writer_node", writer_node)
-builder.add_node("critic_node", critic_node)
-
-# Add Edges
-builder.set_entry_point("planner_node")
-builder.add_edge("planner_node", "writer_node")
-builder.add_edge("writer_node", "critic_node")
-builder.add_conditional_edges("critic_node", should_revise)
-
-compiled_graph = builder.compile()
+def invoke_flow(state: ScreenplayState, store: StateStore | None = None) -> ScreenplayState:
+    """Compatibility shim that delegates to orchestrator-only execution."""
+    return run_lead_agent_flow(state, store=store).state

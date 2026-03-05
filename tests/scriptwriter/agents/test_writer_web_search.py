@@ -1,6 +1,6 @@
+
 from langchain_core.messages import AIMessage, HumanMessage
-from langchain_core.tools import BaseTool, tool
-from typing import Type
+from langchain_core.tools import BaseTool
 from pydantic import BaseModel
 
 import scriptwriter.agents.lead_agent.writer as writer_module
@@ -21,15 +21,14 @@ def test_writer_triggers_web_search_for_hot_topic(monkeypatch):
             )
         ],
     )
-    async def _fake_mcp_tools():
-        return []
-
-    monkeypatch.setattr(writer_module, "get_mcp_tools", _fake_mcp_tools)
+    monkeypatch.setattr(writer_module, "get_cached_mcp_tools", lambda: [])
 
     state = {
         "messages": [HumanMessage(content="写一个关于今天热点新闻的开场")],
         "user_id": "u1",
         "project_id": "p1",
+        "thread_id": "thread_1",
+        "thread_data": {},
         "revision_count": 0,
         "critic_notes": [],
         "plan": [],
@@ -59,7 +58,7 @@ def test_writer_executes_tool_calling_loop(monkeypatch):
     class FakeSearchTool(BaseTool):
         name: str = "search_web"
         description: str = "search the web"
-        args_schema: Type[BaseModel] = SearchSchema
+        args_schema: type[BaseModel] = SearchSchema
 
         def _run(self, query: str, run_manager=None, **kwargs):
             captured["payload"] = {"query": query}
@@ -97,10 +96,7 @@ def test_writer_executes_tool_calling_loop(monkeypatch):
                 )
             return AIMessage(content="INT. ABANDONED FACTORY - DAY\nJohn looks around. He runs.")
 
-    async def _fake_mcp_tools():
-        return []
-
-    monkeypatch.setattr(writer_module, "get_mcp_tools", _fake_mcp_tools)
+    monkeypatch.setattr(writer_module, "get_cached_mcp_tools", lambda: [])
     monkeypatch.setattr(writer_module, "search_web", FakeSearchTool())
     monkeypatch.setattr(writer_module, "search_story_bible", FakeBibleTool())
 
@@ -108,6 +104,8 @@ def test_writer_executes_tool_calling_loop(monkeypatch):
         "messages": [HumanMessage(content="Write a suspense scene")],
         "user_id": "u1",
         "project_id": "p1",
+        "thread_id": "thread_1",
+        "thread_data": {},
         "revision_count": 0,
         "critic_notes": [],
         "plan": [],
@@ -122,4 +120,3 @@ def test_writer_executes_tool_calling_loop(monkeypatch):
     assert "He runs." in delta["current_draft"]
     assert delta["artifacts"]["writer_tool_calls"]
     assert delta["artifacts"]["writer_tool_calls"][0]["tool"] == "search_web"
-

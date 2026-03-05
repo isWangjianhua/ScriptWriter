@@ -9,6 +9,8 @@ def test_run_lead_agent_flow_converges():
         "messages": [HumanMessage(content="Write a scene")],
         "user_id": "user_1",
         "project_id": "project_1",
+        "thread_id": "thread_1",
+        "thread_data": {},
         "revision_count": 0,
         "critic_notes": [],
         "plan": [],

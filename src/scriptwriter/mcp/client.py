@@ -1,5 +1,6 @@
 import logging
 from typing import Any
+
 from scriptwriter.config.extensions import ExtensionsConfig
 
 logger = logging.getLogger(__name__)

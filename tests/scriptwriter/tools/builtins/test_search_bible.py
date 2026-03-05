@@ -24,8 +24,8 @@ def test_search_story_bible_formats_source_annotations(monkeypatch):
     monkeypatch.setattr(search_bible_module, "search_knowledge_hits", _fake_hits)
 
     output = search_story_bible.invoke(
-        {"project_id": "project_1", "query": "vault"},
-        config={"configurable": {"user_id": "user_1"}},
+        {"query": "vault"},
+        config={"configurable": {"user_id": "user_1", "project_id": "project_1"}},
     )
 
     assert "Hero opens the vault." in output
@@ -36,8 +36,8 @@ def test_search_story_bible_no_hit_message(monkeypatch):
     monkeypatch.setattr(search_bible_module, "search_knowledge_hits", lambda **kwargs: [])
 
     output = search_story_bible.invoke(
-        {"project_id": "project_1", "query": "nothing"},
-        config={"configurable": {"user_id": "user_1"}},
+        {"query": "nothing"},
+        config={"configurable": {"user_id": "user_1", "project_id": "project_1"}},
     )
 
     assert output == "No relevant information found."
