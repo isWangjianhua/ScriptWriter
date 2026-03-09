@@ -82,6 +82,11 @@ def _ensure_collection_exists(dimension: int) -> bool:
         schema.add_field(field_name="path_l2", datatype=_data_type.VARCHAR, max_length=255)
         schema.add_field(field_name="segment_type", datatype=_data_type.VARCHAR, max_length=64)
         schema.add_field(field_name="chunk_order", datatype=_data_type.INT64)
+        schema.add_field(field_name="source_type", datatype=_data_type.VARCHAR, max_length=64)
+        schema.add_field(field_name="version_id", datatype=_data_type.VARCHAR, max_length=255)
+        schema.add_field(field_name="episode_id", datatype=_data_type.VARCHAR, max_length=255)
+        schema.add_field(field_name="scene_id", datatype=_data_type.VARCHAR, max_length=255)
+        schema.add_field(field_name="is_active", datatype=_data_type.BOOL)
 
         index_params = client.prepare_index_params()
         index_params.add_index(field_name="vector", metric_type="COSINE", index_type="FLAT")
@@ -90,6 +95,9 @@ def _ensure_collection_exists(dimension: int) -> bool:
         index_params.add_index(field_name="doc_id", index_type="Trie")
         index_params.add_index(field_name="path_l1", index_type="Trie")
         index_params.add_index(field_name="path_l2", index_type="Trie")
+        index_params.add_index(field_name="version_id", index_type="Trie")
+        index_params.add_index(field_name="episode_id", index_type="Trie")
+        index_params.add_index(field_name="scene_id", index_type="Trie")
 
         client.create_collection(
             collection_name=GLOBAL_COLLECTION_NAME,
@@ -161,6 +169,14 @@ def _build_filter_expr(
     add_equals("path_l1", filters.get("path_l1"))
     add_equals("path_l2", filters.get("path_l2"))
     add_equals("segment_type", filters.get("segment_type"))
+    add_equals("source_type", filters.get("source_type"))
+    add_equals("version_id", filters.get("version_id"))
+    add_equals("episode_id", filters.get("episode_id"))
+    add_equals("scene_id", filters.get("scene_id"))
+
+    is_active = filters.get("is_active")
+    if "is_active" in field_names and isinstance(is_active, bool):
+        conditions.append(f"is_active == {str(is_active).lower()}")
 
     doc_ids = filters.get("doc_ids")
     if "doc_id" in field_names and isinstance(doc_ids, list):
@@ -205,6 +221,11 @@ def search_milvus_bible_records(
                 "segment_type",
                 "chunk_order",
                 "title",
+                "source_type",
+                "version_id",
+                "episode_id",
+                "scene_id",
+                "is_active",
             ],
         )
     except Exception as exc:
@@ -238,6 +259,11 @@ def search_milvus_bible_records(
                     "title": entity.get("title"),
                     "score": score_value,
                     "source_backend": "milvus",
+                    "source_type": entity.get("source_type"),
+                    "version_id": entity.get("version_id"),
+                    "episode_id": entity.get("episode_id"),
+                    "scene_id": entity.get("scene_id"),
+                    "is_active": entity.get("is_active"),
                 }
             )
     return records

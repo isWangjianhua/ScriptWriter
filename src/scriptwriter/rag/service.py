@@ -34,6 +34,11 @@ class KnowledgeHit:
     chunk_order: int | None
     score: float | None
     source_backend: str
+    source_type: str | None = None
+    version_id: str | None = None
+    episode_id: str | None = None
+    scene_id: str | None = None
+    is_active: bool | None = None
 
 
 @dataclass(frozen=True)
@@ -87,6 +92,11 @@ def _build_chunk_payloads(
     path_l1: str,
     path_l2: str,
     chunks,
+    source_type: str | None = None,
+    version_id: str | None = None,
+    episode_id: str | None = None,
+    scene_id: str | None = None,
+    is_active: bool = True,
 ) -> tuple[list[dict[str, object]], list[str], list[dict[str, object]]]:
     chunk_rows: list[dict[str, object]] = []
     texts: list[str] = []
@@ -112,6 +122,11 @@ def _build_chunk_payloads(
                 "chunk_index": chunk.chunk_index,
                 "chunk_order": idx,
                 "title": title,
+                "source_type": source_type,
+                "version_id": version_id,
+                "episode_id": episode_id,
+                "scene_id": scene_id,
+                "is_active": is_active,
             }
         )
 
@@ -130,6 +145,11 @@ def ingest_knowledge_document(
     doc_id: str | None = None,
     chunk_max_chars: int = 800,
     chunk_overlap: int = 120,
+    source_type: str | None = None,
+    version_id: str | None = None,
+    episode_id: str | None = None,
+    scene_id: str | None = None,
+    is_active: bool = True,
 ) -> IngestResult:
     body = content.strip()
     if not body:
@@ -169,6 +189,11 @@ def ingest_knowledge_document(
         path_l1=resolved_path_l1,
         path_l2=resolved_path_l2,
         chunks=chunks,
+        source_type=source_type,
+        version_id=version_id,
+        episode_id=episode_id,
+        scene_id=scene_id,
+        is_active=is_active,
     )
 
     vectors = get_embeddings(texts)
@@ -197,6 +222,11 @@ def search_knowledge_hits(
     doc_type: str | None = None,
     path_l1: str | None = None,
     path_l2: str | None = None,
+    source_type: str | None = None,
+    version_id: str | None = None,
+    episode_id: str | None = None,
+    scene_id: str | None = None,
+    is_active: bool | None = None,
 ) -> list[KnowledgeHit]:
     query_text = query.strip()
     if not query_text:
@@ -224,6 +254,16 @@ def search_knowledge_hits(
         filters["path_l1"] = path_l1
     if path_l2:
         filters["path_l2"] = path_l2
+    if source_type:
+        filters["source_type"] = source_type
+    if version_id:
+        filters["version_id"] = version_id
+    if episode_id:
+        filters["episode_id"] = episode_id
+    if scene_id:
+        filters["scene_id"] = scene_id
+    if is_active is not None:
+        filters["is_active"] = is_active
     if candidate_doc_ids:
         filters["doc_ids"] = candidate_doc_ids
 
@@ -245,20 +285,17 @@ def search_knowledge_hits(
             candidate = candidate_by_id.get(doc_id_value or "")
 
             raw_chunk_order = row.get("chunk_order")
-            chunk_order_value = (
-                int(raw_chunk_order) if isinstance(raw_chunk_order, (int, float)) else None
-            )
+            chunk_order_value = int(raw_chunk_order) if isinstance(raw_chunk_order, (int, float)) else None
             raw_score = row.get("score")
             score_value = float(raw_score) if isinstance(raw_score, (int, float)) else None
+            raw_is_active = row.get("is_active")
+            is_active_value = raw_is_active if isinstance(raw_is_active, bool) else None
 
             hits.append(
                 KnowledgeHit(
                     text=text,
                     doc_id=doc_id_value,
-                    doc_type=_pick_str(
-                        row.get("doc_type"),
-                        candidate.doc_type if candidate else None,
-                    ),
+                    doc_type=_pick_str(row.get("doc_type"), candidate.doc_type if candidate else None),
                     title=_pick_str(row.get("title"), candidate.title if candidate else None),
                     path_l1=_pick_str(row.get("path_l1"), candidate.path_l1 if candidate else None),
                     path_l2=_pick_str(row.get("path_l2"), candidate.path_l2 if candidate else None),
@@ -266,6 +303,11 @@ def search_knowledge_hits(
                     chunk_order=chunk_order_value,
                     score=score_value,
                     source_backend="milvus",
+                    source_type=_pick_str(row.get("source_type"), source_type),
+                    version_id=_pick_str(row.get("version_id"), version_id),
+                    episode_id=_pick_str(row.get("episode_id"), episode_id),
+                    scene_id=_pick_str(row.get("scene_id"), scene_id),
+                    is_active=is_active_value if is_active_value is not None else is_active,
                 )
             )
         return hits[:top_k]
@@ -289,6 +331,11 @@ def search_knowledge_hits(
                 chunk_order=chunk_hit.chunk_order,
                 score=float(chunk_hit.score),
                 source_backend="sqlite",
+                source_type=source_type,
+                version_id=version_id,
+                episode_id=episode_id,
+                scene_id=scene_id,
+                is_active=is_active,
             )
         )
     return fallback_hits[:top_k]
@@ -303,6 +350,11 @@ def search_knowledge(
     doc_type: str | None = None,
     path_l1: str | None = None,
     path_l2: str | None = None,
+    source_type: str | None = None,
+    version_id: str | None = None,
+    episode_id: str | None = None,
+    scene_id: str | None = None,
+    is_active: bool | None = None,
 ) -> list[str]:
     hits = search_knowledge_hits(
         user_id=user_id,
@@ -312,6 +364,11 @@ def search_knowledge(
         doc_type=doc_type,
         path_l1=path_l1,
         path_l2=path_l2,
+        source_type=source_type,
+        version_id=version_id,
+        episode_id=episode_id,
+        scene_id=scene_id,
+        is_active=is_active,
     )
     return [hit.text for hit in hits]
 
