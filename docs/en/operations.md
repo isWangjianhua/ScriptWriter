@@ -29,6 +29,12 @@ uv run --extra dev ruff check src tests
   Base directory for SQLite metadata and persisted source text. Default: `data/rag`
 - `SCRIPTWRITER_MILVUS_DB_PATH`  
   Local Milvus database path. Default: `./data/milvus_demo.db`
+- `SCRIPTWRITER_KNOWLEDGE_PG_DSN`  
+  PostgreSQL DSN for knowledge metadata storage (required)
+- `SCRIPTWRITER_OPENSEARCH_URL`  
+  OpenSearch/Elasticsearch-compatible endpoint URL (required)
+- `SCRIPTWRITER_OPENSEARCH_INDEX`  
+  Keyword index name, default `knowledge_chunks_v1`
 
 ### Embeddings
 
@@ -37,6 +43,13 @@ uv run --extra dev ruff check src tests
   Supported values: `auto`, `openai`, `mock`
 - `SCRIPTWRITER_EMBEDDING_MODEL`  
   Default OpenAI embedding model: `text-embedding-3-small`
+- `SCRIPTWRITER_QUERY_REWRITE_MODEL`  
+  LLM model used for query rewrite
+- `SCRIPTWRITER_RERANK_MODEL`  
+  LLM model used for reranking
+- `SCRIPTWRITER_RETRIEVAL_TOPN_VECTOR`
+- `SCRIPTWRITER_RETRIEVAL_TOPN_KEYWORD`
+- `SCRIPTWRITER_RETRIEVAL_TOPK_FINAL`
 
 ### MCP
 
@@ -67,8 +80,8 @@ Knowledge data survives process restarts.
 ## Operational Notes
 
 - There is no documented production persistence backend for project workflow state in the current implementation.
-- If Milvus is unavailable, ingest still persists metadata and source text, but vector search is reduced or disabled.
-- If OpenAI embeddings are unavailable, the system falls back to hash-based embeddings.
+- Knowledge retrieval startup now enforces strong dependencies: PostgreSQL, OpenSearch, and Milvus must all be available.
+- Query path is `rewrite -> hybrid retrieve -> rerank` with LLM rewrite/rerank models.
 
 ## Data Directories
 

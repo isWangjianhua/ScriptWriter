@@ -61,3 +61,4 @@ See [API Reference](docs/en/api-reference.md) for request/response details.
 - Project records, versions, and confirmations live in process memory and reset when the service restarts.
 - Knowledge documents persist under `data/rag/` by default, with vectors stored in the Milvus local database path.
 - `POST /api/projects/{project_id}/chat` can create a missing project if `title` is provided in the request body.
+- Knowledge retrieval now requires `PostgreSQL + OpenSearch + Milvus` at startup. Use `.env.example` as the baseline config.

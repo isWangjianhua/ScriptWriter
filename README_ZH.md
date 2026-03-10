@@ -61,3 +61,4 @@ uv run pytest -q
 - 项目记录、版本和确认信息保存在进程内存里，服务重启后会清空。
 - 知识库默认落在 `data/rag/`，向量数据写入 Milvus 本地数据库文件。
 - `POST /api/projects/{project_id}/chat` 在项目不存在且请求里提供 `title` 时，会先创建项目再生成首个 bible。
+- 知识检索现在要求启动时可用 `PostgreSQL + OpenSearch + Milvus`，建议从 `.env.example` 复制配置。

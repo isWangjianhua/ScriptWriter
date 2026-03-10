@@ -1,4 +1,5 @@
 import importlib
+import os
 
 
 def test_consolidated_project_modules_are_importable():
@@ -14,6 +15,7 @@ def test_consolidated_project_modules_are_importable():
 
 
 def test_main_exports_project_centric_api_app():
+    os.environ["SCRIPTWRITER_SKIP_DEPENDENCY_CHECK"] = "1"
     main_module = importlib.import_module("scriptwriter.main")
     api_module = importlib.import_module("scriptwriter.api.app")
 

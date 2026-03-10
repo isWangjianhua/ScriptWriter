@@ -29,6 +29,12 @@ uv run --extra dev ruff check src tests
   SQLite 元数据与原文存储根目录，默认 `data/rag`
 - `SCRIPTWRITER_MILVUS_DB_PATH`  
   Milvus 本地数据库路径，默认 `./data/milvus_demo.db`
+- `SCRIPTWRITER_KNOWLEDGE_PG_DSN`  
+  知识元数据 PostgreSQL DSN（必填）
+- `SCRIPTWRITER_OPENSEARCH_URL`  
+  OpenSearch / Elasticsearch 兼容地址（必填）
+- `SCRIPTWRITER_OPENSEARCH_INDEX`  
+  关键词索引名，默认 `knowledge_chunks_v1`
 
 ### Embedding
 
@@ -37,6 +43,13 @@ uv run --extra dev ruff check src tests
   支持 `auto`、`openai`、`mock`
 - `SCRIPTWRITER_EMBEDDING_MODEL`  
   默认 OpenAI embedding 模型为 `text-embedding-3-small`
+- `SCRIPTWRITER_QUERY_REWRITE_MODEL`  
+  query 改写使用的 LLM 模型
+- `SCRIPTWRITER_RERANK_MODEL`  
+  rerank 使用的 LLM 模型
+- `SCRIPTWRITER_RETRIEVAL_TOPN_VECTOR`
+- `SCRIPTWRITER_RETRIEVAL_TOPN_KEYWORD`
+- `SCRIPTWRITER_RETRIEVAL_TOPK_FINAL`
 
 ### MCP
 
@@ -67,8 +80,8 @@ uv run --extra dev ruff check src tests
 ## 运维说明
 
 - 当前实现没有文档化的生产级项目状态持久化后端。
-- 若 Milvus 不可用，入库仍会保留元数据和原文，但向量检索能力会退化或关闭。
-- 若 OpenAI embedding 不可用，系统会自动回退到哈希 embedding。
+- 知识检索启动时强依赖 PostgreSQL、OpenSearch、Milvus，任一不可用将启动失败。
+- query 流程为 `rewrite -> hybrid retrieve -> rerank`，改写和重排都依赖 LLM。
 
 ## 数据目录
 

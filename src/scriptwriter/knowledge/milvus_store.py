@@ -76,6 +76,7 @@ def _ensure_collection_exists(dimension: int) -> bool:
         schema.add_field(field_name="project_id", datatype=_data_type.VARCHAR, max_length=255)
         schema.add_field(field_name="text", datatype=_data_type.VARCHAR, max_length=65535)
         schema.add_field(field_name="source", datatype=_data_type.VARCHAR, max_length=255)
+        schema.add_field(field_name="chunk_id", datatype=_data_type.VARCHAR, max_length=255)
         schema.add_field(field_name="doc_id", datatype=_data_type.VARCHAR, max_length=255)
         schema.add_field(field_name="doc_type", datatype=_data_type.VARCHAR, max_length=64)
         schema.add_field(field_name="path_l1", datatype=_data_type.VARCHAR, max_length=255)
@@ -93,6 +94,7 @@ def _ensure_collection_exists(dimension: int) -> bool:
         index_params.add_index(field_name="user_id", index_type="Trie")
         index_params.add_index(field_name="project_id", index_type="Trie")
         index_params.add_index(field_name="doc_id", index_type="Trie")
+        index_params.add_index(field_name="chunk_id", index_type="Trie")
         index_params.add_index(field_name="path_l1", index_type="Trie")
         index_params.add_index(field_name="path_l2", index_type="Trie")
         index_params.add_index(field_name="version_id", index_type="Trie")
@@ -214,6 +216,7 @@ def search_milvus_bible_records(
             output_fields=[
                 "text",
                 "source",
+                "chunk_id",
                 "doc_id",
                 "doc_type",
                 "path_l1",
@@ -251,6 +254,7 @@ def search_milvus_bible_records(
                 {
                     "text": text,
                     "doc_id": entity.get("doc_id"),
+                    "chunk_id": entity.get("chunk_id"),
                     "doc_type": entity.get("doc_type"),
                     "path_l1": entity.get("path_l1"),
                     "path_l2": entity.get("path_l2"),

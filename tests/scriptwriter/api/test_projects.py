@@ -1,7 +1,12 @@
+import os
+
 import httpx
 import pytest
 
+os.environ["SCRIPTWRITER_SKIP_DEPENDENCY_CHECK"] = "1"
+
 from scriptwriter.api.app import app
+from scriptwriter.api.routers import projects as projects_router
 
 
 @pytest.fixture
@@ -10,7 +15,14 @@ def anyio_backend():
 
 
 @pytest.mark.anyio
-async def test_project_endpoints_create_read_chat_confirm_and_list_versions():
+async def test_project_endpoints_create_read_chat_confirm_and_list_versions(monkeypatch):
+    class _FakeResult:
+        doc_id = "doc_fake_1"
+        chunk_count = 2
+        source_path = "/tmp/fake.txt"
+
+    monkeypatch.setattr(projects_router, "ingest_project_knowledge_document", lambda **kwargs: _FakeResult())
+
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         created = await client.post(
