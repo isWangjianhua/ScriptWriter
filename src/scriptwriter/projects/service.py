@@ -1,11 +1,11 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from dataclasses import dataclass
 
 from scriptwriter.agent.models import AgentAction, AgentRequest
 from scriptwriter.agent.prompts import build_bible_prompt, build_draft_prompt, build_outline_prompt, build_rewrite_prompt
 from scriptwriter.agent.service import plan_agent_action
-from scriptwriter.projects.memory import MemoryService
+from scriptwriter.projects.memory import MemoryService, StoryFact, TimelineEvent
 from scriptwriter.projects.models import BibleVersion, ConfirmationRecord, DraftVersion, OutlineVersion, Project
 from scriptwriter.projects.repository import ProjectRepository
 from scriptwriter.projects.workflow import ArtifactType, WorkflowAction, WorkflowStage, WorkflowState, advance_workflow
@@ -20,7 +20,9 @@ class ProjectService:
         existing = self.store.get_project(project_id)
         if existing is not None:
             return existing
-        return self.store.create_project(Project(project_id=project_id, title=title, stage=WorkflowStage.PLANNING.value))
+        created = self.store.create_project(Project(project_id=project_id, title=title, stage=WorkflowStage.PLANNING.value))
+        self._append_timeline_event(project_id, f"Project {project_id} created")
+        return created
 
     def get_project(self, project_id: str) -> Project | None:
         return self.store.get_project(project_id)
@@ -64,6 +66,7 @@ class ProjectService:
             current_artifact_version_id=initial_state.current_artifact_version_id,
         )
         self.store.create_project(project)
+        self._append_timeline_event(project_id, "Project bootstrapped from chat")
         return self._generate_bible(project, user_input)
 
     def confirm_current_artifact(self, project_id: str, *, comment: str | None = None) -> Project:
@@ -80,6 +83,11 @@ class ProjectService:
                 approved=True,
                 comment=comment,
             )
+        )
+        self._record_artifact_approval(
+            project_id=project_id,
+            artifact_type=project.current_artifact_type,
+            version_id=project.current_artifact_version_id,
         )
 
         state = WorkflowState(
@@ -109,6 +117,7 @@ class ProjectService:
         rewrite_state = advance_workflow(state, WorkflowAction.REQUEST_REWRITE)
         rewrite_project = project.model_copy(update={"stage": rewrite_state.stage.value})
         self.store.save_project(rewrite_project)
+        self._append_timeline_event(project_id, "Rewrite requested")
         return self._generate_draft(rewrite_project, instruction, stage=WorkflowStage.COMPLETED, rewrite=True)
 
     def _generate_bible(self, project: Project, user_input: str) -> Project:
@@ -117,9 +126,10 @@ class ProjectService:
             version_id=version_id,
             project_id=project.project_id,
             version_number=self._next_version_number(project.project_id, ArtifactType.BIBLE),
-            content=build_bible_prompt(user_input),
+            content=build_bible_prompt(self._with_memory_context(project.project_id, user_input)),
         )
         self.store.save_bible_version(bible)
+        self._append_timeline_event(project.project_id, f"Generated bible version {version_id}")
         project = self.store.set_active_version(project.project_id, ArtifactType.BIBLE.value, version_id)
         project = project.model_copy(
             update={
@@ -136,9 +146,10 @@ class ProjectService:
             version_id=version_id,
             project_id=project.project_id,
             version_number=self._next_version_number(project.project_id, ArtifactType.OUTLINE),
-            content=build_outline_prompt(user_input),
+            content=build_outline_prompt(self._with_memory_context(project.project_id, user_input)),
         )
         self.store.save_outline_version(outline)
+        self._append_timeline_event(project.project_id, f"Generated outline version {version_id}")
         project = self.store.set_active_version(project.project_id, ArtifactType.OUTLINE.value, version_id)
         project = project.model_copy(
             update={
@@ -151,13 +162,15 @@ class ProjectService:
 
     def _generate_draft(self, project: Project, user_input: str, *, stage: WorkflowStage, rewrite: bool = False) -> Project:
         version_id = self._next_version_id(project.project_id, ArtifactType.DRAFT)
+        enriched_input = self._with_memory_context(project.project_id, user_input)
         draft = DraftVersion(
             version_id=version_id,
             project_id=project.project_id,
             version_number=self._next_version_number(project.project_id, ArtifactType.DRAFT),
-            content=build_rewrite_prompt(user_input) if rewrite else build_draft_prompt(user_input),
+            content=build_rewrite_prompt(enriched_input) if rewrite else build_draft_prompt(enriched_input),
         )
         self.store.save_draft_version(draft)
+        self._append_timeline_event(project.project_id, f"Generated draft version {version_id}")
         project = self.store.set_active_version(project.project_id, ArtifactType.DRAFT.value, version_id)
         project = project.model_copy(
             update={
@@ -167,6 +180,50 @@ class ProjectService:
             }
         )
         return self.store.save_project(project)
+
+    def _record_artifact_approval(self, *, project_id: str, artifact_type: str, version_id: str) -> None:
+        self.memory_service.add_story_fact(
+            project_id,
+            StoryFact(
+                fact_id=f"fact_approved_{artifact_type}_{version_id}",
+                key=f"approved.{artifact_type}.latest",
+                value=version_id,
+                source_version_id=version_id,
+            ),
+        )
+        self._append_timeline_event(project_id, f"Approved {artifact_type} version {version_id}")
+
+    def _append_timeline_event(self, project_id: str, description: str) -> None:
+        snapshot = self.memory_service.get_snapshot(project_id)
+        next_order = max((event.order for event in snapshot.timeline_events), default=0) + 1
+        self.memory_service.add_timeline_event(
+            project_id,
+            TimelineEvent(
+                event_id=f"event_{next_order}",
+                description=description,
+                order=next_order,
+            ),
+        )
+
+    def _with_memory_context(self, project_id: str, user_input: str) -> str:
+        prompt_input = user_input.strip()
+        context = self._format_memory_context(project_id)
+        if not context:
+            return prompt_input
+        return f"{prompt_input}\n\nKnown canon memory:\n{context}"
+
+    def _format_memory_context(self, project_id: str) -> str:
+        snapshot = self.memory_service.get_snapshot(project_id)
+        lines: list[str] = []
+        for character in snapshot.characters:
+            lines.append(f"- character {character.name}: {character.summary}")
+        for rule in snapshot.world_rules:
+            lines.append(f"- world rule: {rule.description}")
+        for fact in snapshot.story_facts:
+            lines.append(f"- {fact.key} = {fact.value}")
+        for event in sorted(snapshot.timeline_events, key=lambda item: item.order):
+            lines.append(f"- timeline #{event.order}: {event.description}")
+        return "\n".join(lines)
 
     def _project_to_workflow_state(self, project: Project) -> WorkflowState:
         return WorkflowState(

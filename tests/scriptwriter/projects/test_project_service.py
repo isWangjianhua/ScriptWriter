@@ -1,4 +1,4 @@
-﻿from scriptwriter.projects.memory import MemoryService
+from scriptwriter.projects.memory import MemoryService, StoryFact
 from scriptwriter.projects.service import ProjectService
 from scriptwriter.projects.store import InMemoryProjectStore
 
@@ -72,3 +72,33 @@ def test_handle_chat_routes_confirmation_and_continue_actions():
     assert continued_project.stage == "drafting"
     assert continued_project.current_artifact_version_id == "draft_v2"
 
+
+def test_confirm_artifact_records_memory_facts_and_timeline():
+    store = InMemoryProjectStore()
+    memory = MemoryService()
+    service = ProjectService(store=store, memory_service=memory)
+
+    service.create_project_from_chat(project_id="project_123", title="Pilot", user_input="Write a crime thriller project")
+    service.confirm_current_artifact("project_123", comment="continue")
+
+    snapshot = memory.get_snapshot("project_123")
+    assert any(fact.key == "approved.bible.latest" and fact.value == "bible_v1" for fact in snapshot.story_facts)
+    assert any("Approved bible version bible_v1" in event.description for event in snapshot.timeline_events)
+
+
+def test_generate_outline_includes_memory_context_in_prompt():
+    store = InMemoryProjectStore()
+    memory = MemoryService()
+    service = ProjectService(store=store, memory_service=memory)
+
+    service.create_project_from_chat(project_id="project_123", title="Pilot", user_input="Write a crime thriller project")
+    memory.add_story_fact(
+        "project_123",
+        StoryFact(fact_id="fact_1", key="protagonist.profession", value="detective"),
+    )
+
+    service.confirm_current_artifact("project_123", comment="continue")
+    outline_version = store.list_versions("project_123", "outline")[0]
+
+    assert "Known canon memory" in outline_version.content
+    assert "protagonist.profession = detective" in outline_version.content

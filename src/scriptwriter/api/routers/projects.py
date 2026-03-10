@@ -6,12 +6,12 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, StringConstraints
 
 from scriptwriter.knowledge.service import ingest_project_knowledge_document
-from scriptwriter.projects.memory import MemoryService
+from scriptwriter.projects.memory import create_memory_service_from_env
 from scriptwriter.projects.service import ProjectService
 from scriptwriter.projects.store import InMemoryProjectStore
 
 router = APIRouter(prefix="/api/projects")
-_service = ProjectService(store=InMemoryProjectStore(), memory_service=MemoryService())
+_service = ProjectService(store=InMemoryProjectStore(), memory_service=create_memory_service_from_env())
 
 
 class CreateProjectRequest(BaseModel):
@@ -111,4 +111,3 @@ async def list_project_versions(project_id: str):
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="project not found") from exc
     return versions
-

@@ -27,6 +27,8 @@ def test_env_example_contains_required_knowledge_settings():
         "SCRIPTWRITER_OPENSEARCH_INDEX=",
         "SCRIPTWRITER_QUERY_REWRITE_MODEL=",
         "SCRIPTWRITER_RERANK_MODEL=",
+        "SCRIPTWRITER_MEMORY_PG_DSN=",
+        "SCRIPTWRITER_MEMORY_REDIS_URL=",
     ]
     for key in required:
         assert key in text
