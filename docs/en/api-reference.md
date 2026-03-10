@@ -1,97 +1,154 @@
 # API Reference
 
-Base media types:
+Base media type: `application/json`
 
-- JSON: `application/json`
-- Chat stream: `application/x-ndjson`
+All endpoints below are current and project-scoped.
 
-All endpoints below are current and thread-scoped.
+## Project Model
 
-## Chat
+Typical project payload:
 
-### `POST /api/threads/{thread_id}/chat`
+```json
+{
+  "project_id": "project_alpha",
+  "title": "Pilot",
+  "stage": "awaiting_confirmation",
+  "current_artifact_type": "bible",
+  "current_artifact_version_id": "bible_v1",
+  "active_bible_version_id": "bible_v1",
+  "active_outline_version_id": null,
+  "active_draft_version_id": null
+}
+```
+
+`stage` values:
+
+- `planning`
+- `awaiting_confirmation`
+- `drafting`
+- `completed`
+- `rewriting`
+
+`current_artifact_type` values:
+
+- `bible`
+- `outline`
+- `draft`
+
+## Projects
+
+### `POST /api/projects`
 
 Request body:
 
 ```json
 {
-  "message": "Write a suspense opening scene",
-  "user_id": "user_1",
   "project_id": "project_alpha",
-  "resume_run_id": "optional_previous_run_id"
+  "title": "Pilot"
 }
 ```
 
 Behavior:
 
-- validates `thread_id`
-- validates `user_id` + `project_id`
-- optional scoped resume from `resume_run_id`
-- executes orchestrator and streams NDJSON events
+- creates the project if it does not exist
+- returns the existing project unchanged if `project_id` already exists
 
-NDJSON event types:
+Response: full project payload.
 
-- `run_started`
-- `canvas_update`
-- `chat_chunk`
-- `critic_note`
-- `error`
+### `GET /api/projects/{project_id}`
 
-## Run Recovery
+Returns the current project payload.
 
-### `GET /api/threads/{thread_id}/runs/{run_id}?user_id=...&project_id=...`
+Errors:
 
-Returns:
+- `404` if the project does not exist
 
-- run metadata (`run_id`, `session_id`, `thread_id`, `status`)
-- recovered `state`
-- complete `events`
-- replay metadata (`replay_from_seq`, `replayed_events`)
+## Chat Workflow
 
-Security semantics:
+### `POST /api/projects/{project_id}/chat`
 
-- `404` if run does not exist
-- `403` if run exists but tenant/thread scope mismatches
+Request body:
 
-## Knowledge Ingest
+```json
+{
+  "message": "Write a crime thriller series",
+  "title": "Pilot"
+}
+```
 
-### `POST /api/threads/{thread_id}/knowledge/ingest`
+Behavior:
+
+- if the project does not exist, `title` is required and the API creates the project first
+- the service classifies the message into one of: generate bible, confirm artifact, generate outline, continue draft, rewrite draft
+- responses are synchronous JSON; there is no streaming response format
+
+Common transitions:
+
+- first chat on a new project -> generates `bible_v1`
+- approval while waiting for bible confirmation -> generates `outline_v1`
+- approval while waiting for outline confirmation -> generates `draft_v1`
+- continue drafting -> creates the next draft version
+- rewrite request -> creates a new draft version from rewrite prompt
+
+Errors:
+
+- `400` if the project is missing and `title` is omitted
+- `404` if the project is missing for a path that requires an existing project
+
+Response: full project payload.
+
+## Confirmation
+
+### `POST /api/projects/{project_id}/confirm`
+
+Request body:
+
+```json
+{
+  "comment": "continue"
+}
+```
+
+Behavior:
+
+- confirms the current pending artifact
+- advances the workflow to the next artifact when applicable
+
+Errors:
+
+- `404` if the project does not exist
+- `400` if no artifact is awaiting confirmation
+
+Response: full project payload.
+
+## Knowledge Upload
+
+### `POST /api/projects/{project_id}/knowledge/upload`
 
 Request body:
 
 ```json
 {
   "user_id": "user_1",
-  "project_id": "project_alpha",
-  "doc_type": "script",
-  "title": "Pilot",
+  "content": "Reference notes for the project",
+  "doc_type": "text",
+  "title": "Story Guide",
   "path_l1": "season1",
-  "path_l2": "ep1",
-  "content": "INT. ROOM - DAY\nHe sits.",
-  "doc_id": "optional_doc_id"
+  "path_l2": "episode1",
+  "source_type": "reference",
+  "version_id": "outline_v1",
+  "episode_id": "ep1",
+  "scene_id": "scene_2",
+  "is_active": true
 }
 ```
 
-Response:
+`doc_type` allowed values:
 
-```json
-{
-  "doc_id": "xxx",
-  "chunk_count": 12,
-  "source_path": "..."
-}
-```
-
-`doc_type` allowed values: `script`, `novel`, `text`, `markdown`.
-
-## Knowledge Upload
-
-### `POST /api/threads/{thread_id}/knowledge/upload`
-
-Multipart form fields:
-
-- required: `file`, `user_id`, `project_id`
-- optional: `title`, `path_l1`, `path_l2`, `doc_type`
+- `script`
+- `novel`
+- `text`
+- `markdown`
 
 Response:
 
@@ -99,61 +156,52 @@ Response:
 {
   "doc_id": "xxx",
   "chunk_count": 3,
-  "filename": "my_novel.txt",
-  "title": "my_novel",
-  "doc_type": "markdown",
-  "virtual_path": "/mnt/user-data/uploads/my_novel.txt",
-  "artifact_url": "/api/threads/thread_alpha/artifacts/mnt/user-data/uploads/my_novel.txt"
+  "source_path": "data/rag/sources/xxx.txt"
 }
 ```
 
-Limits and errors:
+Behavior:
 
-- size cap from `SCRIPTWRITER_MAX_UPLOAD_BYTES`
-- `413` if exceeded
-- traversal and unsafe paths blocked
+- requires the project to exist
+- segments and chunks `content`
+- stores metadata in SQLite under `data/rag/` by default
+- stores vectors in Milvus if available
 
-### `GET /api/threads/{thread_id}/knowledge/upload/list`
+Errors:
+
+- `404` if the project does not exist
+- `400` if content is empty or `doc_type` is invalid
+
+## Versions
+
+### `GET /api/projects/{project_id}/versions`
 
 Response:
 
 ```json
 {
-  "files": [
+  "bible": [
     {
-      "filename": "my_novel.txt",
-      "size": 1234,
-      "virtual_path": "/mnt/user-data/uploads/my_novel.txt",
-      "artifact_url": "/api/threads/thread_alpha/artifacts/mnt/user-data/uploads/my_novel.txt",
-      "modified": 1741161000.0
+      "version_id": "bible_v1",
+      "project_id": "project_alpha",
+      "version_number": 1,
+      "content": "...",
+      "artifact_type": "bible",
+      "status": "active"
     }
   ],
-  "count": 1
+  "outline": [],
+  "draft": []
 }
 ```
 
-### `DELETE /api/threads/{thread_id}/knowledge/upload/{filename}`
+Errors:
 
-Deletes one uploaded file from the thread upload directory.
+- `404` if the project does not exist
 
-## Artifacts
+## Non-Goals of the Current API
 
-### `GET /api/threads/{thread_id}/artifacts/{path}`
-
-Reads files through virtual path mapping.
-
-- `path` must start with `mnt/user-data/...`
-- supports inline text/html rendering
-- supports `?download=true` for attachment response
-
-Typical path examples:
-
-- `mnt/user-data/uploads/my_novel.txt`
-- `mnt/user-data/outputs/final_draft.md`
-
-## Breaking Changes from Legacy API
-
-- removed `POST /api/chat`
-- removed `GET /api/runs/{run_id}`
-- removed non-thread-scoped knowledge endpoints
-- removed `default_user/default_project` fallback behavior
+- no thread-scoped endpoints
+- no run recovery endpoints
+- no file upload / artifact serving routes
+- no chat streaming transport

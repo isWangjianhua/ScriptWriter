@@ -1,5 +1,7 @@
 # English Docs
 
+These docs describe the current project-centric implementation.
+
 ## Core Docs
 
 - [Architecture Overview](architecture.md)
@@ -16,6 +18,6 @@
 
 1. `architecture.md`
 2. `api-reference.md`
-3. `security-model.md`
-4. `operations.md`
+3. `operations.md`
+4. `security-model.md`
 5. `development.md`

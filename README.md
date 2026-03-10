@@ -1,15 +1,16 @@
 # ScriptWriter
 
-Thread-scoped multi-agent screenplay backend built on FastAPI.
+Project-centric screenplay backend built on FastAPI.
 
 中文说明请看 [README_ZH.md](README_ZH.md).
 
 ## What This Project Does
 
-- Runs a `planner -> writer -> critic` orchestration pipeline.
-- Persists run lifecycle (`session`, `run`, `events`, `snapshot`) for recovery.
-- Supports thread-isolated upload and artifact access with path traversal protection.
-- Provides RAG-backed story knowledge ingest/retrieval and optional MCP tools.
+- Manages a screenplay workflow of `bible -> outline -> draft`.
+- Tracks artifact versions and confirmations per project.
+- Stores project state in an in-memory repository for local iteration.
+- Ingests project-scoped knowledge into SQLite metadata plus Milvus-backed vectors.
+- Supports optional MCP tool loading and built-in web / bible tools.
 
 ## Documentation
 
@@ -33,7 +34,7 @@ uv sync
 ### 2. Run API
 
 ```bash
-PYTHONPATH=src uv run uvicorn scriptwriter.gateway.app:app --reload
+PYTHONPATH=src uv run uvicorn scriptwriter.api.app:app --reload
 ```
 
 ### 3. Run Quality Checks
@@ -45,18 +46,18 @@ uv run pytest -q
 
 ## Main Endpoints
 
-- `POST /api/threads/{thread_id}/chat`
-- `GET /api/threads/{thread_id}/runs/{run_id}?user_id=...&project_id=...`
-- `POST /api/threads/{thread_id}/knowledge/ingest`
-- `POST /api/threads/{thread_id}/knowledge/upload`
-- `GET /api/threads/{thread_id}/knowledge/upload/list`
-- `DELETE /api/threads/{thread_id}/knowledge/upload/{filename}`
-- `GET /api/threads/{thread_id}/artifacts/{path}`
+- `POST /api/projects`
+- `GET /api/projects/{project_id}`
+- `POST /api/projects/{project_id}/chat`
+- `POST /api/projects/{project_id}/confirm`
+- `POST /api/projects/{project_id}/knowledge/upload`
+- `GET /api/projects/{project_id}/versions`
 
 See [API Reference](docs/en/api-reference.md) for request/response details.
 
 ## Runtime Notes
 
-- `user_id` and `project_id` are required (no default fallback).
-- `thread_id` is validated (`[A-Za-z0-9_-]+`) and used as isolation boundary.
-- `data/threads/` is runtime data and is ignored by git.
+- API responses are JSON only; there is no chat streaming or run recovery API in the current implementation.
+- Project records, versions, and confirmations live in process memory and reset when the service restarts.
+- Knowledge documents persist under `data/rag/` by default, with vectors stored in the Milvus local database path.
+- `POST /api/projects/{project_id}/chat` can create a missing project if `title` is provided in the request body.

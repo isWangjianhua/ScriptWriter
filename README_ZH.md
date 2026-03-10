@@ -1,15 +1,16 @@
 # ScriptWriter
 
-基于 FastAPI 的线程隔离（thread-scoped）多智能体剧本后端。
+基于 FastAPI 的 project-scoped 剧本后端。
 
 For English, see [README.md](README.md).
 
 ## 项目能力
 
-- 执行 `planner -> writer -> critic` 编排链路。
-- 持久化 `session/run/events/snapshot`，支持运行恢复。
-- 支持线程隔离上传与产物读取，并具备路径穿越防护。
-- 支持基于 RAG 的知识入库/检索，以及可选 MCP 工具。
+- 管理 `bible -> outline -> draft` 的剧本工作流。
+- 按项目维护产物版本与确认记录。
+- 当前项目状态存放在进程内存中，便于本地迭代。
+- 将项目知识入库到 SQLite 元数据和 Milvus 向量存储。
+- 支持可选 MCP 工具加载，以及内置联网搜索 / bible 工具。
 
 ## 文档
 
@@ -33,7 +34,7 @@ uv sync
 ### 2. 启动 API
 
 ```bash
-PYTHONPATH=src uv run uvicorn scriptwriter.gateway.app:app --reload
+PYTHONPATH=src uv run uvicorn scriptwriter.api.app:app --reload
 ```
 
 ### 3. 运行质量检查
@@ -45,18 +46,18 @@ uv run pytest -q
 
 ## 主要接口
 
-- `POST /api/threads/{thread_id}/chat`
-- `GET /api/threads/{thread_id}/runs/{run_id}?user_id=...&project_id=...`
-- `POST /api/threads/{thread_id}/knowledge/ingest`
-- `POST /api/threads/{thread_id}/knowledge/upload`
-- `GET /api/threads/{thread_id}/knowledge/upload/list`
-- `DELETE /api/threads/{thread_id}/knowledge/upload/{filename}`
-- `GET /api/threads/{thread_id}/artifacts/{path}`
+- `POST /api/projects`
+- `GET /api/projects/{project_id}`
+- `POST /api/projects/{project_id}/chat`
+- `POST /api/projects/{project_id}/confirm`
+- `POST /api/projects/{project_id}/knowledge/upload`
+- `GET /api/projects/{project_id}/versions`
 
 请求与响应细节见 [API 参考](docs/zh/api-reference.md)。
 
 ## 运行说明
 
-- `user_id` 和 `project_id` 为必填。
-- `thread_id` 会按正则 `^[A-Za-z0-9_-]+$` 校验。
-- `data/threads/` 是运行时数据，已加入 `.gitignore`。
+- 当前接口全部返回 JSON，没有流式 chat 或 run 恢复接口。
+- 项目记录、版本和确认信息保存在进程内存里，服务重启后会清空。
+- 知识库默认落在 `data/rag/`，向量数据写入 Milvus 本地数据库文件。
+- `POST /api/projects/{project_id}/chat` 在项目不存在且请求里提供 `title` 时，会先创建项目再生成首个 bible。

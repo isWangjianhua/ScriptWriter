@@ -2,60 +2,69 @@
 
 ## 范围
 
-当前安全能力聚焦在：
+当前安全能力比较基础，主要包括：
 
-- 线程隔离
-- 租户归属校验
-- 路径穿越防护
-- 上传大小与类型限制
+- 通过 Pydantic 做请求体验证
+- 在工作流和知识接口上校验项目是否存在
+- 通过 `user_id` 和 `project_id` 做知识数据作用域过滤
+- 将知识原文限制在 `data/rag/` 目录下持久化
 
-这还不是完整认证授权体系。
+这还不是完整的认证和授权系统。
 
-## 隔离边界
+## API 边界
 
-### 线程边界
+当前接口全部是 project-scoped：
 
-- 接口统一为 `/api/threads/{thread_id}/...`
-- `thread_id` 必须匹配 `^[A-Za-z0-9_-]+$`
-- 线程目录统一在 `SCRIPTWRITER_THREADS_DIR` 下解析
+- `POST /api/projects`
+- `GET /api/projects/{project_id}`
+- `POST /api/projects/{project_id}/chat`
+- `POST /api/projects/{project_id}/confirm`
+- `POST /api/projects/{project_id}/knowledge/upload`
+- `GET /api/projects/{project_id}/versions`
 
-### 租户边界
+当前实现不存在 thread 边界。
 
-run 恢复按以下三元组做归属校验：
+## 校验边界
 
-- `thread_id`
+请求体通过 Pydantic 保证以下字段非空：
+
+- `project_id`、`title`、`message`
+- 知识上传里的 `user_id`、`content`、`doc_type`
+
+知识入库还会额外限制 `doc_type` 必须属于：
+
+- `script`
+- `novel`
+- `text`
+- `markdown`
+
+## 知识作用域隔离
+
+知识记录按以下字段做隔离：
+
 - `user_id`
 - `project_id`
 
-通过 `get_run_scoped(...)` 禁止裸 `run_id` 读取。
+这两个字段会在入库时写入 SQLite 元数据，也会作为 Milvus 检索过滤条件。
 
-## 路径安全
+## 数据安全特征
 
-- 上传删除/读取会拦截路径穿越。
-- 虚拟路径仅允许 `/mnt/user-data/{uploads|outputs|workspace}`。
-- 解析后的真实路径必须位于允许目录内。
-
-## 上传链路加固
-
-- 分块读取上传文件。
-- `SCRIPTWRITER_MAX_UPLOAD_BYTES` 限制体积。
-- 不支持扩展名直接拒绝。
-- 文件名会规范化处理。
-
-## Prompt / Tool 安全
-
-- 中间件将外部联网内容标记为不可信数据。
-- 工具调用完整性中间件会修补悬空 tool call 消息链。
+- 项目工作流状态仅保存在内存里，降低了长期暴露面，但不具备持久性
+- 原文文件会写入配置的 RAG 数据目录
+- Milvus 不可用时，向量检索会自动退化
+- OpenAI embedding 不可用时，会回退到确定性的哈希 embedding
 
 ## 已知缺口
 
-- `user_id`、`project_id` 仍由客户端传入（尚未绑定 JWT/Session）。
-- 尚无网关级限流与配额。
-- 尚无集中式审计日志管线。
+- `user_id` 和 `project_id` 仍然由客户端直接传入，没有身份绑定
+- 没有 authn / authz 层
+- 没有限流或配额控制
+- 没有审计日志链路
+- 没有持久化的项目工作流存储
 
-## 建议的下一步
+## 建议的下一步加固
 
-1. 接入认证并由服务端注入用户/项目上下文。
-2. 增加限流与防滥用策略。
-3. 增加敏感操作审计日志。
-4. 增加越权/穿越攻击指标监控与告警。
+1. 增加认证层，并从可信上下文推导 `user_id`。
+2. 为 chat 和知识入库接口增加限流。
+3. 为项目变更和知识写入增加审计日志。
+4. 引入带访问控制边界的持久化项目存储。

@@ -11,7 +11,7 @@ uv sync
 Run API:
 
 ```bash
-PYTHONPATH=src uv run uvicorn scriptwriter.gateway.app:app --reload
+PYTHONPATH=src uv run uvicorn scriptwriter.api.app:app --reload
 ```
 
 Run tests and lint:
@@ -21,67 +21,65 @@ uv run pytest -q
 uv run --extra dev ruff check src tests
 ```
 
-Rebuild knowledge index:
-
-```bash
-uv run python scripts/rebuild_knowledge_index.py \
-  --user-id user_1 \
-  --project-id project_alpha
-```
-
 ## Environment Variables
 
-### Core
+### Knowledge Storage
+
+- `SCRIPTWRITER_RAG_DATA_DIR`  
+  Base directory for SQLite metadata and persisted source text. Default: `data/rag`
+- `SCRIPTWRITER_MILVUS_DB_PATH`  
+  Local Milvus database path. Default: `./data/milvus_demo.db`
+
+### Embeddings
 
 - `OPENAI_API_KEY`
-- `SCRIPTWRITER_DATABASE_URL`
-- `SCRIPTWRITER_THREADS_DIR` (default `data/threads`)
-- `SCRIPTWRITER_RAG_DATA_DIR` (default `data/rag`)
-- `SCRIPTWRITER_MAX_UPLOAD_BYTES` (default `20971520`)
-
-### Models
-
-- `SCRIPTWRITER_WRITER_MODEL` (default `gpt-4o`)
-- `SCRIPTWRITER_CRITIC_MODEL` (default `gpt-4o-mini`)
-
-### Embeddings / Retrieval
-
-- `SCRIPTWRITER_EMBEDDING_PROVIDER` (`auto`, `openai`, `mock`)
-- `SCRIPTWRITER_EMBEDDING_MODEL`
-- `SCRIPTWRITER_MILVUS_DB_PATH` (default `./data/milvus_demo.db`)
+- `SCRIPTWRITER_EMBEDDING_PROVIDER`  
+  Supported values: `auto`, `openai`, `mock`
+- `SCRIPTWRITER_EMBEDDING_MODEL`  
+  Default OpenAI embedding model: `text-embedding-3-small`
 
 ### MCP
 
-- `SCRIPTWRITER_MCP_SERVERS_JSON`
-- `SCRIPTWRITER_ENABLE_BRAVE_MCP`
+- `SCRIPTWRITER_MCP_SERVERS_JSON`  
+  JSON object of MCP server configs
+- `SCRIPTWRITER_ENABLE_BRAVE_MCP`  
+  Legacy shortcut for enabling Brave MCP via stdio
 - `BRAVE_API_KEY`
 
-## State Store Selection
+## Persistence Model
 
-Selection happens in `state_store/factory.py`:
+### Project Workflow State
 
-- if `SCRIPTWRITER_DATABASE_URL` is set and Postgres init succeeds -> PostgreSQL store
-- otherwise -> in-memory store
+- projects
+- artifact versions
+- confirmation records
 
-Operational recommendation:
+These live only in process memory through `InMemoryProjectStore`. Restarting the API clears them.
 
-- Use PostgreSQL for any persistent/staging/production environment.
-- In-memory store is suitable for local tests and demos only.
+### Knowledge Data
+
+- document metadata: SQLite database under `data/rag/metadata.db` by default
+- source text: `data/rag/sources/`
+- vector data: Milvus local db file
+
+Knowledge data survives process restarts.
+
+## Operational Notes
+
+- There is no documented production persistence backend for project workflow state in the current implementation.
+- If Milvus is unavailable, ingest still persists metadata and source text, but vector search is reduced or disabled.
+- If OpenAI embeddings are unavailable, the system falls back to hash-based embeddings.
 
 ## Data Directories
 
-- Thread runtime files: `data/threads/{thread_id}/...`
-- RAG metadata/sources: `data/rag/...`
-- Milvus local db: `data/milvus_demo.db` (default path)
+- Knowledge metadata and source text: `data/rag/...`
+- Milvus local database: `data/milvus_demo.db` by default
 
-`data/threads/` is runtime state and should not be committed.
-
-## Observability Gaps (Current)
+## Observability Gaps
 
 The current codebase does not yet provide:
 
-- unified request ID tracing
+- request-level tracing
 - structured metrics export
-- centralized auth context propagation
-
-These are recommended next steps before production hardening.
+- authentication-derived runtime context
+- durable project workflow storage

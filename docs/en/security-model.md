@@ -2,60 +2,69 @@
 
 ## Scope
 
-Current security posture is focused on:
+Current security posture is limited and focused on:
 
-- thread isolation
-- tenant ownership checks
-- path traversal protection
-- upload size/type controls
+- basic request validation through Pydantic models
+- project existence checks on workflow and knowledge routes
+- project-scoped knowledge filtering by `user_id` and `project_id`
+- optional isolation of persisted knowledge files under `data/rag/`
 
-This is not a full authentication/authorization system yet.
+This is not a full authentication or authorization system.
 
-## Isolation Boundaries
+## API Boundary
 
-### Thread Boundary
+The current API surface is project-scoped:
 
-- Each request is thread-scoped: `/api/threads/{thread_id}/...`
-- `thread_id` must match `^[A-Za-z0-9_-]+$`
-- Thread directories are resolved under `SCRIPTWRITER_THREADS_DIR`
+- `POST /api/projects`
+- `GET /api/projects/{project_id}`
+- `POST /api/projects/{project_id}/chat`
+- `POST /api/projects/{project_id}/confirm`
+- `POST /api/projects/{project_id}/knowledge/upload`
+- `GET /api/projects/{project_id}/versions`
 
-### Tenant Boundary
+There is no thread boundary in the current implementation.
 
-Run recovery is scoped by:
+## Validation Boundary
 
-- `thread_id`
+Request bodies use Pydantic validation for:
+
+- non-empty `project_id`, `title`, and `message`
+- non-empty `user_id`, `content`, and `doc_type` for knowledge upload
+
+Knowledge ingest further enforces a `doc_type` allowlist:
+
+- `script`
+- `novel`
+- `text`
+- `markdown`
+
+## Knowledge Isolation
+
+Knowledge records are scoped by:
+
 - `user_id`
 - `project_id`
 
-`get_run_scoped(...)` enforces the tuple and prevents raw `run_id` access.
+These fields are written into SQLite metadata and Milvus filters during ingest and search.
 
-## Path Safety
+## Data Safety Characteristics
 
-- Upload delete/list/read routes reject traversal attempts.
-- Virtual path resolver only accepts paths under `/mnt/user-data/{uploads|outputs|workspace}`.
-- Resolved filesystem paths must stay under allowed base directories.
-
-## Upload Hardening
-
-- File upload reads in chunks.
-- Max size is enforced by `SCRIPTWRITER_MAX_UPLOAD_BYTES`.
-- Unsupported extensions are rejected.
-- Unsafe filenames are normalized.
-
-## Prompt/Tool Safety
-
-- Middleware marks external web context as untrusted data.
-- Tool-call integrity middleware patches dangling tool call message chains.
+- project workflow state is in-memory only, which reduces long-lived state exposure but is not durable
+- persisted knowledge source files are written under the configured RAG data directory
+- vector search falls back gracefully when Milvus is unavailable
+- embeddings fall back to deterministic hash vectors when OpenAI embeddings are unavailable
 
 ## Known Gaps
 
-- `user_id` and `project_id` are still client-supplied (no JWT/session binding yet).
-- No rate limiting or quota enforcement at gateway level.
-- No centralized audit log pipeline.
+- `user_id` and `project_id` are client-supplied; there is no identity binding
+- no authn/authz layer
+- no rate limiting or quota enforcement
+- no audit logging pipeline
+- no durable project workflow store
 
 ## Recommended Next Hardening Steps
 
-1. Add auth layer and derive user/project scope from verified identity.
-2. Add request-level rate limiting.
-3. Add structured audit logging for sensitive operations.
-4. Add metrics and alerts for repeated forbidden/traversal attempts.
+1. Add authenticated identity and derive `user_id` from trusted context.
+2. Add rate limiting for chat and knowledge ingest endpoints.
+3. Add audit logging for project mutations and knowledge writes.
+4. Introduce a durable project store with access-control boundaries.

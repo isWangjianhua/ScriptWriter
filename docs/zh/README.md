@@ -1,5 +1,7 @@
 # 中文文档
 
+本目录描述当前 project-centric 实现。
+
 ## 核心文档
 
 - [架构总览](architecture.md)
@@ -16,6 +18,6 @@
 
 1. `architecture.md`
 2. `api-reference.md`
-3. `security-model.md`
-4. `operations.md`
+3. `operations.md`
+4. `security-model.md`
 5. `development.md`

@@ -1,11 +1,11 @@
 # 开发指南
 
-## 开发原则
+## 工作原则
 
-- 严格保持 thread 与租户边界（`thread_id`、`user_id`、`project_id`）。
-- 保持 RAG 与运行状态职责分离。
-- 变更行为优先补测试。
-- 事件与快照必须可 JSON 序列化。
+- 保持项目工作流逻辑和知识入库逻辑分离。
+- 除非明确要改产品行为，否则维持 `bible -> outline -> draft` 的流转模型。
+- 重构或行为改动前优先补测试。
+- API 契约以 `src/scriptwriter/api/routers/projects.py` 为准。
 
 ## 本地开发流程
 
@@ -15,57 +15,61 @@
 uv sync
 ```
 
-2. 跑测试：
+2. 运行测试：
 
 ```bash
 uv run pytest -q
 ```
 
-3. 跑 lint：
+3. 运行静态检查：
 
 ```bash
 uv run --extra dev ruff check src tests
 ```
 
-4. 启动 API：
+4. 启动 API 做手工验证：
 
 ```bash
-PYTHONPATH=src uv run uvicorn scriptwriter.gateway.app:app --reload
+PYTHONPATH=src uv run uvicorn scriptwriter.api.app:app --reload
 ```
 
-## 测试目录说明
+## 测试目录
 
-- `tests/scriptwriter/gateway/routers/`：API 与安全行为
-- `tests/scriptwriter/agents/`：编排与状态逻辑
-- `tests/scriptwriter/state_store/`：存储层协议
-- `tests/scriptwriter/rag/`：切分、元数据与检索
-- `tests/scriptwriter/tools/builtins/`：工具契约
+- `tests/scriptwriter/api/`：API 契约行为
+- `tests/scriptwriter/projects/`：项目服务与仓库行为
+- `tests/scriptwriter/workflow/`：工作流状态流转
+- `tests/scriptwriter/knowledge/`：入库与检索行为
+- `tests/scriptwriter/tools/builtins/`：工具级行为
+- `tests/scriptwriter/memory/`：内存快照行为
 
-## 常见变更路径
+## 常见改动模式
 
-### 新增 API
+### 新增或修改 API 接口
 
-1. 在 `src/scriptwriter/gateway/routers/` 添加路由
-2. 在 `gateway/app.py` 注册
-3. 在 `tests/scriptwriter/gateway/routers/` 添加测试
-4. 更新 `docs/*/api-reference.md`
+1. 修改 `src/scriptwriter/api/routers/projects.py`，或在 `src/scriptwriter/api/routers/` 下新增 router。
+2. 如有需要，在 `src/scriptwriter/api/app.py` 注册新 router。
+3. 在 `tests/scriptwriter/api/` 下新增或修改测试。
+4. 同步更新 `docs/en/api-reference.md` 和 `docs/zh/api-reference.md`。
 
-### 修改 Agent State
+### 修改工作流逻辑
 
-1. 更新 `agents/thread_state.py`
-2. 更新 orchestrator 的合并与恢复逻辑
-3. 如有需要更新序列化逻辑
-4. 更新对应测试
+1. 在 `src/scriptwriter/projects/workflow.py` 修改状态流转。
+2. 在 `src/scriptwriter/projects/service.py` 和 `src/scriptwriter/agent/service.py` 修改编排与动作判定。
+3. 在 `tests/scriptwriter/projects/` 与 `tests/scriptwriter/workflow/` 中补充或调整测试。
+4. 若用户可见流程发生变化，同时更新 README 和架构文档。
 
-### 修改 State Store 协议
+### 修改知识库行为
 
-1. 先改 `state_store/base.py`
-2. 同步改 `in_memory.py` 与 `postgres.py`
-3. 补协议一致性测试
+1. 修改 `src/scriptwriter/knowledge/service.py`。
+2. 按需要修改 `metadata_store.py`、`milvus_store.py`、`embeddings.py` 等支持模块。
+3. 在 `tests/scriptwriter/knowledge/` 中补充或调整测试。
+4. 若环境变量、存储路径或作用域语义变化，同时更新运维与安全文档。
 
-## 文档更新规则
+## 文档规则
 
-当 API、环境变量、行为变更时，至少同步更新：
+当行为、接口或环境变量发生变化时，至少同步更新：
 
-- `README.md` / `README_ZH.md`
-- `docs/en/*` 与 `docs/zh/*` 对应文档
+- `README.md`
+- `README_ZH.md`
+- `docs/en/` 下至少一份详细文档
+- `docs/zh/` 下对应的中文文档
