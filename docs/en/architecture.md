@@ -61,7 +61,7 @@ The API is project-centric rather than thread-centric.
 
 1. A client creates a project explicitly with `POST /api/projects`, or implicitly by calling `POST /api/projects/{project_id}/chat` with a `title`.
 2. `ProjectService.handle_chat(...)` converts the current project state into a workflow state.
-3. `plan_agent_action(...)` classifies the message using keyword heuristics such as approve, continue, and rewrite.
+3. `plan_agent_action(...)` runs a LangGraph routing graph; routing rules currently use keyword heuristics such as approve, continue, and rewrite.
 4. The service generates the next artifact version:
    - bible via `build_bible_prompt(...)`
    - outline via `build_outline_prompt(...)`
@@ -128,7 +128,7 @@ flowchart TD
 - `src/scriptwriter/projects/workflow.py`: workflow states and transitions
 - `src/scriptwriter/projects/store.py`: in-memory project/version store
 - `src/scriptwriter/projects/models.py`: API and domain models
-- `src/scriptwriter/agent/service.py`: action planning heuristics
+- `src/scriptwriter/agent/service.py`: LangGraph-based action routing graph
 - `src/scriptwriter/agent/prompts.py`: artifact prompt builders
 
 ### Memory

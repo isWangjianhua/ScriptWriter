@@ -61,7 +61,7 @@ flowchart TB
 
 1. 客户端可以先调用 `POST /api/projects` 创建项目，也可以直接调用 `POST /api/projects/{project_id}/chat` 并携带 `title` 让接口隐式创建项目。
 2. `ProjectService.handle_chat(...)` 会把当前项目转换成工作流状态。
-3. `plan_agent_action(...)` 通过 approve、continue、rewrite 等关键词来判断本次动作。
+3. `plan_agent_action(...)` 通过 LangGraph 路由图执行动作判定；当前规则仍基于 approve、continue、rewrite 等关键词。
 4. 服务生成下一个产物版本：
    - bible: `build_bible_prompt(...)`
    - outline: `build_outline_prompt(...)`
@@ -128,7 +128,7 @@ flowchart TD
 - `src/scriptwriter/projects/workflow.py`：工作流状态与流转
 - `src/scriptwriter/projects/store.py`：内存版项目 / 版本仓库
 - `src/scriptwriter/projects/models.py`：领域与接口模型
-- `src/scriptwriter/agent/service.py`：动作判定逻辑
+- `src/scriptwriter/agent/service.py`：基于 LangGraph 的动作路由图
 - `src/scriptwriter/agent/prompts.py`：各类产物 prompt 构造
 
 ### Memory

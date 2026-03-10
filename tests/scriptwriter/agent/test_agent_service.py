@@ -1,4 +1,4 @@
-﻿from scriptwriter.agent.models import AgentAction, AgentRequest
+from scriptwriter.agent.models import AgentAction, AgentRequest
 from scriptwriter.agent.service import plan_agent_action
 from scriptwriter.projects.workflow import ArtifactType, WorkflowStage, WorkflowState
 
@@ -53,4 +53,20 @@ def test_plans_continue_draft_when_user_requests_more_pages():
     action = plan_agent_action(request)
 
     assert action.action is AgentAction.CONTINUE_DRAFT
+
+
+def test_plan_agent_action_routes_through_langgraph(monkeypatch):
+    import scriptwriter.agent.service as service_module
+    from scriptwriter.agent.models import AgentPlan
+
+    class _FakeGraph:
+        def invoke(self, state):
+            assert "request" in state
+            return {"plan": AgentPlan(action=AgentAction.GENERATE_BIBLE, reason="from-graph")}
+
+    monkeypatch.setattr(service_module, "_AGENT_PLAN_GRAPH", _FakeGraph())
+
+    request = AgentRequest(user_input="hello", workflow_state=None)
+    action = service_module.plan_agent_action(request)
+    assert action.reason == "from-graph"
 
