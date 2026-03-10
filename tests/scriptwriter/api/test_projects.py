@@ -25,41 +25,41 @@ async def test_project_endpoints_create_read_chat_confirm_and_list_versions():
 
         chatted = await client.post(
             "/api/projects/project_456/chat",
-            json={"message": "写一个犯罪悬疑剧项目", "title": "Pilot"},
+            json={"message": "Write a crime thriller series", "title": "Pilot"},
         )
         assert chatted.status_code == 200
         assert chatted.json()["current_artifact_type"] == "bible"
 
         outline = await client.post(
             "/api/projects/project_456/chat",
-            json={"message": "确认，继续"},
+            json={"message": "approve and continue"},
         )
         assert outline.status_code == 200
         assert outline.json()["current_artifact_type"] == "outline"
 
         draft = await client.post(
             "/api/projects/project_456/chat",
-            json={"message": "确认，开始写"},
+            json={"message": "approve and start writing"},
         )
         assert draft.status_code == 200
         assert draft.json()["current_artifact_type"] == "draft"
 
         continued = await client.post(
             "/api/projects/project_456/chat",
-            json={"message": "继续往下写"},
+            json={"message": "continue writing"},
         )
         assert continued.status_code == 200
         assert continued.json()["current_artifact_version_id"] == "draft_v2"
 
         confirmed = await client.post(
             "/api/projects/project_123/confirm",
-            json={"comment": "继续"},
+            json={"comment": "continue"},
         )
         assert confirmed.status_code == 400
 
         create_for_knowledge = await client.post(
             "/api/projects/project_789/chat",
-            json={"message": "写一个科幻项目", "title": "Sci-Fi"},
+            json={"message": "Write a sci-fi project", "title": "Sci-Fi"},
         )
         assert create_for_knowledge.status_code == 200
 
@@ -67,9 +67,9 @@ async def test_project_endpoints_create_read_chat_confirm_and_list_versions():
             "/api/projects/project_789/knowledge/upload",
             json={
                 "user_id": "user_1",
-                "content": "一份设定资料",
+                "content": "Reference notes for the project",
                 "doc_type": "text",
-                "title": "设定集",
+                "title": "Story Guide",
                 "source_type": "reference",
             },
         )

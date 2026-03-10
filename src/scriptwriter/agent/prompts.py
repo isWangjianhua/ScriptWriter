@@ -1,7 +1,6 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from scriptwriter.agent.models import AgentAction
-from scriptwriter.workflow.models import ArtifactType
 
 
 def build_bible_prompt(user_input: str) -> str:
@@ -28,3 +27,4 @@ def build_prompt_for_action(action: AgentAction, user_input: str) -> str:
     if action is AgentAction.REWRITE_SCENE:
         return build_rewrite_prompt(user_input)
     return build_draft_prompt(user_input)
+

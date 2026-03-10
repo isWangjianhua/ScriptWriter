@@ -1,10 +1,10 @@
-from scriptwriter.agent.models import AgentAction, AgentRequest
+ï»¿from scriptwriter.agent.models import AgentAction, AgentRequest
 from scriptwriter.agent.service import plan_agent_action
-from scriptwriter.workflow.models import ArtifactType, WorkflowStage, WorkflowState
+from scriptwriter.projects.workflow import ArtifactType, WorkflowStage, WorkflowState
 
 
 def test_plans_bible_generation_for_new_project():
-    request = AgentRequest(user_input="Ğ´Ò»¸öĞüÒÉ¾çÏîÄ¿", workflow_state=None)
+    request = AgentRequest(user_input="å†™ä¸€ä¸ªæ‚¬ç–‘å‰§é¡¹ç›®", workflow_state=None)
 
     action = plan_agent_action(request)
 
@@ -13,7 +13,7 @@ def test_plans_bible_generation_for_new_project():
 
 def test_plans_outline_generation_when_bible_has_been_approved():
     request = AgentRequest(
-        user_input="È·ÈÏÕâ¸ö bible",
+        user_input="ç¡®è®¤è¿™ä¸ª bible",
         workflow_state=WorkflowState(stage=WorkflowStage.PLANNING, current_artifact_type=ArtifactType.OUTLINE),
     )
 
@@ -24,7 +24,7 @@ def test_plans_outline_generation_when_bible_has_been_approved():
 
 def test_plans_artifact_confirmation_in_review_stage():
     request = AgentRequest(
-        user_input="È·ÈÏ£¬¼ÌĞø",
+        user_input="ç¡®è®¤ï¼Œç»§ç»­",
         workflow_state=WorkflowState(stage=WorkflowStage.AWAITING_CONFIRMATION, current_artifact_type=ArtifactType.BIBLE),
     )
 
@@ -35,7 +35,7 @@ def test_plans_artifact_confirmation_in_review_stage():
 
 def test_plans_scene_rewrite_for_explicit_rewrite_request():
     request = AgentRequest(
-        user_input="Ö±½ÓÖØĞ´µÚÈı³¡Ï·£¬ÈÃ³åÍ»¸üÇ¿",
+        user_input="ç›´æ¥é‡å†™ç¬¬ä¸‰åœºæˆï¼Œè®©å†²çªæ›´å¼º",
         workflow_state=WorkflowState(stage=WorkflowStage.COMPLETED, current_artifact_type=ArtifactType.DRAFT),
     )
 
@@ -46,10 +46,11 @@ def test_plans_scene_rewrite_for_explicit_rewrite_request():
 
 def test_plans_continue_draft_when_user_requests_more_pages():
     request = AgentRequest(
-        user_input="¼ÌĞøÍùÏÂĞ´",
+        user_input="ç»§ç»­å¾€ä¸‹å†™",
         workflow_state=WorkflowState(stage=WorkflowStage.DRAFTING, current_artifact_type=ArtifactType.DRAFT),
     )
 
     action = plan_agent_action(request)
 
     assert action.action is AgentAction.CONTINUE_DRAFT
+

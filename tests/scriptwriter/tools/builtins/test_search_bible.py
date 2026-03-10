@@ -1,5 +1,5 @@
-import scriptwriter.tools.builtins.search_bible as search_bible_module
-from scriptwriter.rag.service import KnowledgeHit
+﻿import scriptwriter.tools.builtins.search_bible as search_bible_module
+from scriptwriter.knowledge.service import KnowledgeHit
 from scriptwriter.tools.builtins.search_bible import search_story_bible
 
 
@@ -41,3 +41,4 @@ def test_search_story_bible_no_hit_message(monkeypatch):
     )
 
     assert output == "No relevant information found."
+

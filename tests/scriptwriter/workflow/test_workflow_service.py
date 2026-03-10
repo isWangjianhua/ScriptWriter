@@ -1,5 +1,5 @@
-from scriptwriter.workflow.models import ArtifactType, WorkflowStage, WorkflowState
-from scriptwriter.workflow.service import WorkflowAction, advance_workflow
+﻿from scriptwriter.projects.workflow import ArtifactType, WorkflowStage, WorkflowState
+from scriptwriter.projects.workflow import WorkflowAction, advance_workflow
 
 
 def test_start_project_enters_planning_with_bible_target():
@@ -67,3 +67,4 @@ def test_rewrite_completion_returns_to_requested_stage():
     assert next_state.stage is WorkflowStage.COMPLETED
     assert next_state.current_artifact_type is ArtifactType.DRAFT
     assert next_state.current_artifact_version_id == "draft_v4"
+

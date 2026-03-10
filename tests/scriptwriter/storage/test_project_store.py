@@ -1,5 +1,5 @@
-from scriptwriter.projects.models import BibleVersion, ConfirmationRecord, DraftVersion, OutlineVersion, Project
-from scriptwriter.storage.in_memory_project_store import InMemoryProjectStore
+﻿from scriptwriter.projects.models import BibleVersion, ConfirmationRecord, DraftVersion, OutlineVersion, Project
+from scriptwriter.projects.store import InMemoryProjectStore
 
 
 def test_create_project_and_load_it_back():
@@ -55,3 +55,4 @@ def test_record_confirmation_returns_the_saved_record():
     saved = store.record_confirmation(record)
 
     assert saved == record
+

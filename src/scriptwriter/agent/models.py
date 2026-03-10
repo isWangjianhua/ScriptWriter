@@ -1,10 +1,10 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from enum import Enum
 
 from pydantic import BaseModel
 
-from scriptwriter.workflow.models import WorkflowState
+from scriptwriter.projects.workflow import WorkflowState
 
 
 class AgentAction(str, Enum):
@@ -23,3 +23,4 @@ class AgentRequest(BaseModel):
 class AgentPlan(BaseModel):
     action: AgentAction
     reason: str
+

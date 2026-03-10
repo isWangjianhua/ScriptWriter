@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from typing import Annotated
 
@@ -6,9 +6,9 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, StringConstraints
 
 from scriptwriter.knowledge.service import ingest_project_knowledge_document
-from scriptwriter.memory.service import MemoryService
+from scriptwriter.projects.memory import MemoryService
 from scriptwriter.projects.service import ProjectService
-from scriptwriter.storage.in_memory_project_store import InMemoryProjectStore
+from scriptwriter.projects.store import InMemoryProjectStore
 
 router = APIRouter(prefix="/api/projects")
 _service = ProjectService(store=InMemoryProjectStore(), memory_service=MemoryService())
@@ -111,3 +111,4 @@ async def list_project_versions(project_id: str):
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="project not found") from exc
     return versions
+

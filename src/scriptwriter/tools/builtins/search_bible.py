@@ -1,7 +1,7 @@
-from langchain_core.runnables.config import RunnableConfig
+﻿from langchain_core.runnables.config import RunnableConfig
 from langchain_core.tools import tool
 
-from scriptwriter.rag.service import KnowledgeHit, search_knowledge_hits
+from scriptwriter.knowledge.service import KnowledgeHit, search_knowledge_hits
 
 
 def _format_source(hit: KnowledgeHit) -> str:
@@ -27,12 +27,9 @@ def search_story_bible(
     query: str,
     path_l1: str | None = None,
     path_l2: str | None = None,
-    config: RunnableConfig = None
+    config: RunnableConfig = None,
 ) -> str:
-    """Search story bible for character/rule/background context with citation hints.
-    Use path_l1 and path_l2 to filter by document categories (e.g. path_l1="characters").
-    """
-    # Extract user_id/project_id from trusted runtime config to avoid prompt spoofing.
+    """Search story bible for character, rule, and background context with citation hints."""
     scope = _scope_from_config(config)
     if scope is None:
         return "Missing runtime scope: user_id and project_id are required."
@@ -58,3 +55,4 @@ def search_story_bible(
         return "\n\n".join(lines)
     except Exception as exc:
         return f"Knowledge base error or not initialized: {str(exc)}"
+

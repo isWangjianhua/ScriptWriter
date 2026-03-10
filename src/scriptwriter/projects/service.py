@@ -1,15 +1,14 @@
-from __future__ import annotations
+ï»¿from __future__ import annotations
 
 from dataclasses import dataclass
 
 from scriptwriter.agent.models import AgentAction, AgentRequest
 from scriptwriter.agent.prompts import build_bible_prompt, build_draft_prompt, build_outline_prompt, build_rewrite_prompt
 from scriptwriter.agent.service import plan_agent_action
-from scriptwriter.memory.service import MemoryService
+from scriptwriter.projects.memory import MemoryService
 from scriptwriter.projects.models import BibleVersion, ConfirmationRecord, DraftVersion, OutlineVersion, Project
 from scriptwriter.projects.repository import ProjectRepository
-from scriptwriter.workflow.models import ArtifactType, WorkflowStage, WorkflowState
-from scriptwriter.workflow.service import WorkflowAction, advance_workflow
+from scriptwriter.projects.workflow import ArtifactType, WorkflowAction, WorkflowStage, WorkflowState, advance_workflow
 
 
 @dataclass
@@ -30,9 +29,9 @@ class ProjectService:
         if self.store.get_project(project_id) is None:
             raise KeyError(project_id)
         return {
-            "bible": [version.model_dump() for version in self.store.list_versions(project_id, "bible")],
-            "outline": [version.model_dump() for version in self.store.list_versions(project_id, "outline")],
-            "draft": [version.model_dump() for version in self.store.list_versions(project_id, "draft")],
+            "bible": [version.model_dump() for version in self.store.list_versions(project_id, ArtifactType.BIBLE.value)],
+            "outline": [version.model_dump() for version in self.store.list_versions(project_id, ArtifactType.OUTLINE.value)],
+            "draft": [version.model_dump() for version in self.store.list_versions(project_id, ArtifactType.DRAFT.value)],
         }
 
     def handle_chat(self, *, project_id: str, user_input: str, title: str | None = None) -> Project:
@@ -91,9 +90,9 @@ class ProjectService:
         next_state = advance_workflow(state, WorkflowAction.APPROVE_ARTIFACT)
 
         if next_state.current_artifact_type is ArtifactType.OUTLINE:
-            return self._generate_outline(project, comment or "¼ÌÐø")
+            return self._generate_outline(project, comment or "continue")
         if next_state.current_artifact_type is ArtifactType.DRAFT:
-            return self._generate_draft(project, comment or "¿ªÊ¼Ð´", stage=next_state.stage)
+            return self._generate_draft(project, comment or "start writing", stage=next_state.stage)
 
         updated = project.model_copy(
             update={
@@ -121,7 +120,7 @@ class ProjectService:
             content=build_bible_prompt(user_input),
         )
         self.store.save_bible_version(bible)
-        project = self.store.set_active_version(project.project_id, "bible", version_id)
+        project = self.store.set_active_version(project.project_id, ArtifactType.BIBLE.value, version_id)
         project = project.model_copy(
             update={
                 "stage": WorkflowStage.AWAITING_CONFIRMATION.value,
@@ -140,7 +139,7 @@ class ProjectService:
             content=build_outline_prompt(user_input),
         )
         self.store.save_outline_version(outline)
-        project = self.store.set_active_version(project.project_id, "outline", version_id)
+        project = self.store.set_active_version(project.project_id, ArtifactType.OUTLINE.value, version_id)
         project = project.model_copy(
             update={
                 "stage": WorkflowStage.AWAITING_CONFIRMATION.value,
@@ -159,7 +158,7 @@ class ProjectService:
             content=build_rewrite_prompt(user_input) if rewrite else build_draft_prompt(user_input),
         )
         self.store.save_draft_version(draft)
-        project = self.store.set_active_version(project.project_id, "draft", version_id)
+        project = self.store.set_active_version(project.project_id, ArtifactType.DRAFT.value, version_id)
         project = project.model_copy(
             update={
                 "stage": stage.value,
@@ -188,3 +187,4 @@ class ProjectService:
         if project is None:
             raise KeyError(project_id)
         return project
+

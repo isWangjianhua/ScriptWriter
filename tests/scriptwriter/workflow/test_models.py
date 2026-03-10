@@ -1,5 +1,5 @@
-from scriptwriter.shared.models import ArtifactVersionSummary, ConfirmationPayload, ProjectSummary
-from scriptwriter.workflow.models import ArtifactType, WorkflowStage, WorkflowState
+﻿from scriptwriter.shared.models import ArtifactVersionSummary, ConfirmationPayload, ProjectSummary
+from scriptwriter.projects.workflow import ArtifactType, WorkflowStage, WorkflowState
 
 
 def test_workflow_stage_values_are_stable():
@@ -65,3 +65,4 @@ def test_confirmation_payload_tracks_user_decision():
 
     assert payload.approved is True
     assert payload.comment == "Looks good."
+

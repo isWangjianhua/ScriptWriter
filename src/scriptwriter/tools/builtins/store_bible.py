@@ -1,7 +1,7 @@
-from langchain_core.runnables.config import RunnableConfig
+﻿from langchain_core.runnables.config import RunnableConfig
 from langchain_core.tools import tool
 
-from scriptwriter.rag.service import ingest_knowledge_document
+from scriptwriter.knowledge.service import ingest_knowledge_document
 
 
 def _scope_from_config(config: RunnableConfig) -> tuple[str, str] | None:
@@ -19,14 +19,9 @@ def save_story_bible(
     title: str,
     path_l1: str | None = None,
     path_l2: str | None = None,
-    config: RunnableConfig = None
+    config: RunnableConfig = None,
 ) -> str:
-    """Save newly established lore, rules, or character sheets to the story bible (RAG database).
-    Use this proactively when the user establishes a new permanent fact about the story world or a character's background.
-    - title: short descriptive title (e.g. 'John Doe Bio')
-    - path_l1: category (e.g. 'characters', 'world_rules', 'locations')
-    - path_l2: sub-category (optional)
-    """
+    """Save newly established lore, rules, or character sheets to the story bible."""
     scope = _scope_from_config(config)
     if scope is None:
         return "Missing runtime scope: user_id and project_id are required."
@@ -37,7 +32,7 @@ def save_story_bible(
             user_id=user_id,
             project_id=project_id,
             content=content,
-            doc_type="markdown",  # Always ingest these agent-created notes as markdown
+            doc_type="markdown",
             title=title,
             path_l1=path_l1,
             path_l2=path_l2,
@@ -45,3 +40,4 @@ def save_story_bible(
         return f"Successfully saved to story bible. Doc ID: {result.doc_id}"
     except Exception as exc:
         return f"Failed to save to story bible: {str(exc)}"
+

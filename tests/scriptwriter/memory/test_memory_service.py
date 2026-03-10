@@ -1,5 +1,5 @@
-from scriptwriter.memory.models import CharacterProfile, StoryFact, TimelineEvent, WorldRule
-from scriptwriter.memory.service import MemoryConflict, MemoryService
+﻿from scriptwriter.projects.memory import CharacterProfile, StoryFact, TimelineEvent, WorldRule
+from scriptwriter.projects.memory import MemoryConflict, MemoryService
 
 
 def test_memory_service_stores_structured_entries_by_project():
@@ -55,3 +55,4 @@ def test_detect_fact_conflicts_ignores_matching_values():
     )
 
     assert conflicts == []
+
