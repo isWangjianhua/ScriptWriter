@@ -61,7 +61,7 @@ PYTHONPATH=src uv run uvicorn scriptwriter.api.app:app --reload
 ### Change Knowledge Behavior
 
 1. Update `src/scriptwriter/knowledge/service.py`.
-2. Update supporting modules such as `metadata_store.py`, `milvus_store.py`, or `embeddings.py`.
+2. Update supporting modules such as `metadata_store_pg.py`, `keyword_store.py`, `milvus_store.py`, or `embeddings.py`.
 3. Add or adjust tests under `tests/scriptwriter/knowledge/`.
 4. Update operations and security docs if env vars, storage paths, or scope semantics change.
 

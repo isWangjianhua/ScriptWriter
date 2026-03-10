@@ -9,8 +9,8 @@ For English, see [README.md](README.md).
 - 管理 `bible -> outline -> draft` 的剧本工作流。
 - 按项目维护产物版本与确认记录。
 - 当前项目状态存放在进程内存中，便于本地迭代。
-- 将项目知识入库到 SQLite 元数据和 Milvus 向量存储。
-- 支持可选 MCP 工具加载，以及内置联网搜索 / bible 工具。
+- 将项目知识入库到 PostgreSQL 元数据、OpenSearch 关键词索引和 Milvus 向量存储。
+- 提供内置联网搜索和故事知识检索工具。
 
 ## 文档
 

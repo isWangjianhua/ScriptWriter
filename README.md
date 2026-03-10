@@ -9,8 +9,8 @@ Project-centric screenplay backend built on FastAPI.
 - Manages a screenplay workflow of `bible -> outline -> draft`.
 - Tracks artifact versions and confirmations per project.
 - Stores project state in an in-memory repository for local iteration.
-- Ingests project-scoped knowledge into SQLite metadata plus Milvus-backed vectors.
-- Supports optional MCP tool loading and built-in web / bible tools.
+- Ingests project-scoped knowledge into PostgreSQL metadata, OpenSearch index, and Milvus vectors.
+- Provides built-in web and story-bible search tools.
 
 ## Documentation
 

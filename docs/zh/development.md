@@ -61,7 +61,7 @@ PYTHONPATH=src uv run uvicorn scriptwriter.api.app:app --reload
 ### 修改知识库行为
 
 1. 修改 `src/scriptwriter/knowledge/service.py`。
-2. 按需要修改 `metadata_store.py`、`milvus_store.py`、`embeddings.py` 等支持模块。
+2. 按需要修改 `metadata_store_pg.py`、`keyword_store.py`、`milvus_store.py`、`embeddings.py` 等支持模块。
 3. 在 `tests/scriptwriter/knowledge/` 中补充或调整测试。
 4. 若环境变量、存储路径或作用域语义变化，同时更新运维与安全文档。
 

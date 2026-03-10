@@ -26,7 +26,7 @@ uv run --extra dev ruff check src tests
 ### 知识库存储
 
 - `SCRIPTWRITER_RAG_DATA_DIR`  
-  SQLite 元数据与原文存储根目录，默认 `data/rag`
+  原文存储根目录，默认 `data/rag`
 - `SCRIPTWRITER_MILVUS_DB_PATH`  
   Milvus 本地数据库路径，默认 `./data/milvus_demo.db`
 - `SCRIPTWRITER_KNOWLEDGE_PG_DSN`  
@@ -51,14 +51,6 @@ uv run --extra dev ruff check src tests
 - `SCRIPTWRITER_RETRIEVAL_TOPN_KEYWORD`
 - `SCRIPTWRITER_RETRIEVAL_TOPK_FINAL`
 
-### MCP
-
-- `SCRIPTWRITER_MCP_SERVERS_JSON`  
-  MCP server 配置 JSON 对象
-- `SCRIPTWRITER_ENABLE_BRAVE_MCP`  
-  旧式 Brave MCP 快捷开关
-- `BRAVE_API_KEY`
-
 ## 持久化模型
 
 ### 项目工作流状态
@@ -71,7 +63,8 @@ uv run --extra dev ruff check src tests
 
 ### 知识库数据
 
-- 文档元数据：默认位于 `data/rag/metadata.db`
+- 文档元数据：通过 `SCRIPTWRITER_KNOWLEDGE_PG_DSN` 写入 PostgreSQL
+- 关键词索引：通过 `SCRIPTWRITER_OPENSEARCH_INDEX` 写入 OpenSearch
 - 原文：默认位于 `data/rag/sources/`
 - 向量数据：Milvus 本地数据库文件
 

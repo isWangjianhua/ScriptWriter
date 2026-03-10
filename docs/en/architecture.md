@@ -7,8 +7,8 @@ ScriptWriter currently runs as a single FastAPI process centered on project work
 - API: project CRUD, workflow chat, confirmation, version listing, knowledge ingest
 - Workflow: `bible -> outline -> draft`, advanced synchronously per request
 - Project state: in-memory repository for projects, versions, and confirmation records
-- Knowledge: SQLite metadata plus Milvus-backed vector search
-- Tools: optional MCP tools plus built-in knowledge and web search tools
+- Knowledge: PostgreSQL metadata, OpenSearch keyword index, plus Milvus vector search
+- Tools: built-in knowledge and web search tools
 
 ```mermaid
 flowchart TB
@@ -30,13 +30,13 @@ flowchart TB
 
     subgraph Knowledge[Knowledge Layer]
       KService["knowledge/service.py"]
-      Meta["knowledge/metadata_store.py"]
+      Meta["knowledge/metadata_store_pg.py"]
+      Keyword["knowledge/keyword_store.py"]
       Milvus["knowledge/milvus_store.py"]
       Emb["knowledge/embeddings.py"]
     end
 
     subgraph Tools[Tools]
-      MCP["mcp/tools.py"]
       Builtins["tools/builtins/*"]
     end
 
@@ -49,9 +49,9 @@ flowchart TB
     Service --> Model
     Router --> KService
     KService --> Meta
+    KService --> Keyword
     KService --> Milvus
     KService --> Emb
-    Service --> MCP
     Service --> Builtins
 ```
 
@@ -98,8 +98,8 @@ Knowledge ingest is separate from the in-memory project store.
 1. `POST /api/projects/{project_id}/knowledge/upload` checks that the project exists.
 2. `ingest_knowledge_document(...)` validates `doc_type`, segments text, and chunks it.
 3. Source text is persisted under `${SCRIPTWRITER_RAG_DATA_DIR:-data/rag}/sources/`.
-4. Document and chunk metadata are stored in SQLite.
-5. Embeddings are generated and inserted into Milvus when available.
+4. Document metadata is stored in PostgreSQL and chunk keyword index is upserted to OpenSearch.
+5. Embeddings are generated and inserted into Milvus.
 
 ```mermaid
 flowchart TD
@@ -108,10 +108,11 @@ flowchart TD
     C --> D["segment_content(...)"]
     D --> E["chunk_segments(...)"]
     E --> F["persist source text"]
-    F --> G["upsert SQLite metadata"]
-    G --> H["embed chunks"]
-    H --> I["insert vectors into Milvus"]
-    I --> J["Return doc_id + chunk_count + source_path"]
+    F --> G["upsert PostgreSQL metadata"]
+    G --> H["upsert OpenSearch keyword index"]
+    H --> I["embed chunks"]
+    I --> J["insert vectors into Milvus"]
+    J --> K["Return doc_id + chunk_count + source_path"]
 ```
 
 ## Module Map
@@ -137,15 +138,14 @@ flowchart TD
 ### Knowledge
 
 - `src/scriptwriter/knowledge/service.py`: ingest and retrieval orchestration
-- `src/scriptwriter/knowledge/metadata_store.py`: SQLite metadata and source management
+- `src/scriptwriter/knowledge/metadata_store_pg.py`: PostgreSQL metadata and source management
+- `src/scriptwriter/knowledge/keyword_store.py`: OpenSearch keyword index adapter
 - `src/scriptwriter/knowledge/milvus_store.py`: vector storage and filtered search
 - `src/scriptwriter/knowledge/embeddings.py`: OpenAI or hash-based embeddings
 
-### MCP and Tools
+### Tools
 
-- `src/scriptwriter/mcp/client.py`: MCP server config adapter
-- `src/scriptwriter/mcp/tools.py`: cached MCP tool loader
-- `src/scriptwriter/tools/builtins/`: knowledge search/store, web search, skill read
+- `src/scriptwriter/tools/builtins/`: knowledge search and web search tools
 
 ## Data Boundaries
 

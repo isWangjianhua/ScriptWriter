@@ -26,7 +26,7 @@ uv run --extra dev ruff check src tests
 ### Knowledge Storage
 
 - `SCRIPTWRITER_RAG_DATA_DIR`  
-  Base directory for SQLite metadata and persisted source text. Default: `data/rag`
+  Base directory for persisted source text. Default: `data/rag`
 - `SCRIPTWRITER_MILVUS_DB_PATH`  
   Local Milvus database path. Default: `./data/milvus_demo.db`
 - `SCRIPTWRITER_KNOWLEDGE_PG_DSN`  
@@ -51,14 +51,6 @@ uv run --extra dev ruff check src tests
 - `SCRIPTWRITER_RETRIEVAL_TOPN_KEYWORD`
 - `SCRIPTWRITER_RETRIEVAL_TOPK_FINAL`
 
-### MCP
-
-- `SCRIPTWRITER_MCP_SERVERS_JSON`  
-  JSON object of MCP server configs
-- `SCRIPTWRITER_ENABLE_BRAVE_MCP`  
-  Legacy shortcut for enabling Brave MCP via stdio
-- `BRAVE_API_KEY`
-
 ## Persistence Model
 
 ### Project Workflow State
@@ -71,7 +63,8 @@ These live only in process memory through `InMemoryProjectStore`. Restarting the
 
 ### Knowledge Data
 
-- document metadata: SQLite database under `data/rag/metadata.db` by default
+- document metadata: PostgreSQL via `SCRIPTWRITER_KNOWLEDGE_PG_DSN`
+- keyword index: OpenSearch index `SCRIPTWRITER_OPENSEARCH_INDEX`
 - source text: `data/rag/sources/`
 - vector data: Milvus local db file
 
